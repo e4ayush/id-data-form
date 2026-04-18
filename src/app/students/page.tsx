@@ -33,6 +33,9 @@ export default function StudentsPage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Error feedback
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   useEffect(() => {
     fetchSchools();
   }, []);
@@ -79,16 +82,20 @@ export default function StudentsPage() {
     if (!newStudent.name || !activeSchool) return;
     setIsCreating(true);
     try {
-      await fetch(`${API_URL}/student`, {
+      const res = await fetch(`${API_URL}/student`, {
         method: "POST",
         headers: adminHeaders,
         body: JSON.stringify({ ...newStudent, school_id: activeSchool.id, custom_data: {} }),
       });
+      if (!res.ok) {
+        const result = await res.json();
+        throw new Error(result.detail || "Failed to create student.");
+      }
       fetchStudents(activeSchool.id);
       setShowCreate(false);
       setNewStudent({ name: "" });
-    } catch (error) {
-      console.error("Create failed", error);
+    } catch (error: any) {
+      setErrorMsg(error.message || "Create failed. Please try again.");
     } finally {
       setIsCreating(false);
     }
@@ -107,13 +114,17 @@ export default function StudentsPage() {
   const handleDelete = async (id: string, name: string) => {
     if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return;
     try {
-      await fetch(`${API_URL}/student/${id}`, {
+      const res = await fetch(`${API_URL}/student/${id}`, {
         method: "DELETE",
         headers: adminHeaders,
       });
+      if (!res.ok) {
+        const result = await res.json();
+        throw new Error(result.detail || "Delete failed on the server.");
+      }
       setStudents(students.filter((s) => s.id !== id));
-    } catch (error) {
-      console.error("Delete failed", error);
+    } catch (error: any) {
+      setErrorMsg(error.message || "Delete failed. Please try again.");
     }
   };
 
@@ -149,8 +160,8 @@ export default function StudentsPage() {
       fetchStudents(activeSchool.id);
       setEditStudent(null);
       setNewPhotoFile(null);
-    } catch (error) {
-      console.error("Save failed", error);
+    } catch (error: any) {
+      setErrorMsg(error.message || "Save failed. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -163,6 +174,52 @@ export default function StudentsPage() {
         .sort(),
     [students]
   );
+
+  // Derive the schema for the "New Student" form from existing students.
+  // Core fields that actually appear with a value in ANY student are shown.
+  // Custom fields present in ANY student's custom_data are also shown.
+  const createFormFields = useMemo(() => {
+    const CORE_FIELDS = [
+      { key: "class", label: "Class" },
+      { key: "section", label: "Section" },
+      { key: "roll_number", label: "Roll No" },
+      { key: "admission_number", label: "Admission No" },
+      { key: "dob", label: "Date of Birth" },
+      { key: "fathers_name", label: "Father's Name" },
+      { key: "mothers_name", label: "Mother's Name" },
+      { key: "blood_group", label: "Blood Group" },
+      { key: "phone", label: "Phone" },
+      { key: "aadhar_number", label: "Aadhar No" },
+      { key: "address", label: "Address" },
+      { key: "house", label: "House" },
+      { key: "height", label: "Height" },
+      { key: "weight", label: "Weight" },
+    ];
+
+    if (students.length === 0) {
+      // No data yet — show a minimal sensible set
+      return [
+        { key: "class", label: "Class" },
+        { key: "section", label: "Section" },
+        { key: "roll_number", label: "Roll No" },
+        { key: "admission_number", label: "Admission No" },
+      ];
+    }
+
+    // Which core fields have at least one non-empty value?
+    const usedCore = CORE_FIELDS.filter((f) =>
+      students.some((s) => s[f.key] != null && s[f.key] !== "")
+    );
+
+    // Which custom_data keys appear in at least one student?
+    const customKeys = new Set<string>();
+    students.forEach((s) => {
+      Object.keys(s.custom_data || {}).forEach((k) => customKeys.add(k));
+    });
+    const usedCustom = Array.from(customKeys).map((k) => ({ key: `custom_${k}`, label: k, isCustom: true }));
+
+    return [...usedCore, ...usedCustom];
+  }, [students]);
 
   const filteredStudents = useMemo(() => {
     let list = selectedClass === "All" ? students : students.filter((s) => s.class === selectedClass);
@@ -200,6 +257,17 @@ export default function StudentsPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
+
+      {/* ── Error Banner ── */}
+      {errorMsg && (
+        <div className="mb-6 flex items-start gap-3 bg-red-50 border border-red-200 text-red-800 text-sm font-medium px-4 py-3 rounded-xl">
+          <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="flex-1">{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0">&times;</button>
+        </div>
+      )}
 
       {/* ── Top Bar ── */}
       <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-8">
@@ -411,34 +479,33 @@ export default function StudentsPage() {
             </div>
             <div className="overflow-y-auto max-h-[60vh] p-6">
               <form id="createForm" onSubmit={handleCreateStudent} className="space-y-3">
-                {[
-                  { key: "name", label: "Full Name *", required: true },
-                  { key: "class", label: "Class" },
-                  { key: "section", label: "Section" },
-                  { key: "roll_number", label: "Roll No" },
-                  { key: "admission_number", label: "Admission No" },
-                  { key: "dob", label: "Date of Birth" },
-                  { key: "fathers_name", label: "Father's Name" },
-                  { key: "mothers_name", label: "Mother's Name" },
-                  { key: "blood_group", label: "Blood Group" },
-                  { key: "phone", label: "Phone" },
-                  { key: "aadhar_number", label: "Aadhar No" },
-                  { key: "address", label: "Address" },
-                  { key: "house", label: "House" },
-                  { key: "height", label: "Height" },
-                  { key: "weight", label: "Weight" },
-                ].map(({ key, label, required }) => (
-                  <div key={key}>
-                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</label>
-                    <input
-                      type="text"
-                      required={required}
-                      value={newStudent[key] || ""}
-                      onChange={(e) => setNewStudent({ ...newStudent, [key]: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                    />
-                  </div>
-                ))}
+                {/* Name — always required */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newStudent.name || ""}
+                    onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                  />
+                </div>
+
+                {/* Dynamically derived fields — only fields this school actually uses */}
+                {createFormFields.map(({ key, label, isCustom }: any) => {
+                  const stateKey = isCustom ? key : key;
+                  return (
+                    <div key={key}>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</label>
+                      <input
+                        type="text"
+                        value={newStudent[stateKey] || ""}
+                        onChange={(e) => setNewStudent({ ...newStudent, [stateKey]: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                      />
+                    </div>
+                  );
+                })}
               </form>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
