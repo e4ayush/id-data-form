@@ -2,10 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { API_URL } from "@/lib/api";
+import { Modal } from "@/components/Modal";
 
 export default function SchoolsManagementPage() {
   const [schools, setSchools] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Modal States
+  const [deleteData, setDeleteData] = useState<{ id: string, name: string } | null>(null);
+  const [resetData, setResetData] = useState<{ id: string, name: string } | null>(null);
+  const [newCredentials, setNewCredentials] = useState<{ email: string, password: string } | null>(null);
+  
+  // Processing States
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
 
   // Fetch all schools on load
@@ -29,13 +39,13 @@ export default function SchoolsManagementPage() {
   };
 
 
-  const handleDeleteSchool = async (id: string, name: string) => {
-    // Safety check so you don't accidentally delete a school!
-    const confirmDelete = window.confirm(`DANGER: Are you sure you want to permanently delete "${name}" and ALL of its students? This cannot be undone.`);
-    if (!confirmDelete) return;
+  // MODAL HANDLERS
+  const confirmDeleteSchool = async () => {
+    if (!deleteData) return;
+    setIsDeleting(true);
 
     try {
-      const res = await fetch(`${API_URL}/schools/${id}`, {
+      const res = await fetch(`${API_URL}/schools/${deleteData.id}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -44,25 +54,27 @@ export default function SchoolsManagementPage() {
       });
       
       if (res.ok) {
-        // Remove from UI and clear local storage if it was the active school
-        setSchools(schools.filter(s => s.id !== id));
+        setSchools(schools.filter(s => s.id !== deleteData.id));
         const active = localStorage.getItem("bizeraActiveSchool");
-        if (active && JSON.parse(active).id === id) {
+        if (active && JSON.parse(active).id === deleteData.id) {
           localStorage.removeItem("bizeraActiveSchool");
         }
+        setDeleteData(null);
+      } else {
+        alert("Delete failed on backend.");
       }
     } catch (error) {
       console.error("Failed to delete school:", error);
-      alert("Failed to delete the school. Check console.");
     }
+    setIsDeleting(false);
   };
 
-  const handleResetPassword = async (id: string, name: string) => {
-    const confirmReset = window.confirm(`Are you sure you want to reset the password for "${name}"?`);
-    if (!confirmReset) return;
+  const confirmResetPassword = async () => {
+    if (!resetData) return;
+    setIsResetting(true);
 
     try {
-      const res = await fetch(`${API_URL}/schools/${id}/reset-password`, {
+      const res = await fetch(`${API_URL}/schools/${resetData.id}/reset-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -72,15 +84,17 @@ export default function SchoolsManagementPage() {
       
       const result = await res.json();
       if (res.ok) {
-        alert(`Success! Tell the school admin their new credentials:\n\nEmail: ${result.email}\nNew Password: ${result.new_password}\n\nPlease copy these now, they will not be shown again!`);
+        setNewCredentials({ email: result.email, password: result.new_password });
       } else {
         alert(`Failed: ${result.detail || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Failed to reset password:", error);
-      alert("Failed to reset password. Check console.");
     }
+    setIsResetting(false);
   };
+
+
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -148,12 +162,12 @@ export default function SchoolsManagementPage() {
                           <td className="px-6 py-4 text-right flex justify-end gap-2">
                             <button 
                               className="text-gray-600 hover:text-indigo-600 font-medium text-xs bg-gray-50 hover:bg-indigo-50 px-3 py-1.5 rounded-md transition-colors border border-gray-200 hover:border-indigo-200"
-                              onClick={() => handleResetPassword(school.id, school.name)}
+                              onClick={() => setResetData({ id: school.id, name: school.name })}
                             >
                               Reset Pass
                             </button>
                             <button 
-                              onClick={() => handleDeleteSchool(school.id, school.name)}
+                              onClick={() => setDeleteData({ id: school.id, name: school.name })}
                               className="text-red-600 hover:text-white font-medium text-xs bg-red-50 hover:bg-red-600 px-3 py-1.5 rounded-md transition-colors"
                             >
                               Delete
@@ -170,6 +184,87 @@ export default function SchoolsManagementPage() {
         </div>
 
       </div>
+      {/* Modals placed globally below layout */}
+
+      {/* Delete Confirmation Modal */}
+      <Modal 
+        isOpen={deleteData !== null} 
+        onClose={() => setDeleteData(null)} 
+        title="Delete School Confirmation"
+      >
+        <div className="py-2">
+          <p className="text-gray-600 mb-6">
+            You are about to permanently delete <strong className="text-gray-900">{deleteData?.name}</strong> and <strong className="text-red-600">ALL</strong> of its associated students from the database.<br /><br />Are you absolutely sure? This action cannot be undone.
+          </p>
+          <div className="flex gap-3 mt-4">
+            <button onClick={() => setDeleteData(null)} className="flex-1 py-2.5 rounded-xl border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button onClick={confirmDeleteSchool} disabled={isDeleting} className="flex-1 py-2.5 rounded-xl bg-red-600 font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50">
+              {isDeleting ? "Deleting..." : "Yes, Delete School"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Password Reset Flow Modal */}
+      <Modal 
+        isOpen={resetData !== null} 
+        onClose={() => { setResetData(null); setNewCredentials(null); }} 
+        title="Reset School Password"
+      >
+        <div className="py-2">
+          {!newCredentials ? (
+            <>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to forcibly reset the password for <strong className="text-gray-900">{resetData?.name}</strong>? They will instantly lose access using their current credentials.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setResetData(null)} className="flex-1 py-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={confirmResetPassword} disabled={isResetting} className="flex-1 py-2.5 bg-indigo-600 rounded-xl font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                  {isResetting ? "Resetting..." : "Confirm Reset"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col gap-5">
+              <div className="mx-auto w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center shrink-0 mb-1">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+              <div className="text-center">
+                <h4 className="text-xl font-bold text-gray-900">Pasword Reset Complete</h4>
+                <p className="text-sm text-gray-500 mt-1">Please provide the new credentials to the admin.</p>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mt-2">
+                <p className="text-sm text-amber-800 mb-4 font-medium flex items-center gap-2">
+                  <svg className="w-5 h-5 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
+                  Copy the credentials now!
+                </p>
+                <div className="space-y-3 font-mono text-sm">
+                  <div className="bg-white px-4 py-3 rounded-lg border border-amber-100 shadow-sm flex justify-between">
+                    <span className="text-gray-400 select-none uppercase text-xs tracking-wider font-sans">Email</span> 
+                    <span className="font-bold text-gray-800">{newCredentials.email}</span>
+                  </div>
+                  <div className="bg-white px-4 py-3 rounded-lg border border-amber-100 shadow-sm flex justify-between">
+                    <span className="text-gray-400 select-none uppercase text-xs tracking-wider font-sans">New Password</span> 
+                    <span className="font-bold text-gray-800">{newCredentials.password}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => { setResetData(null); setNewCredentials(null); }}
+                className="mt-2 w-full px-4 py-3 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors"
+               >
+                Copied / Close
+              </button>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
