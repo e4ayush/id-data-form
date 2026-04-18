@@ -260,7 +260,7 @@ export default function StudentsPage() {
     });
     const usedCustom = Array.from(customKeys).map((k) => ({ key: `custom_${k}`, label: k, isCustom: true }));
 
-    return [...usedCore, ...usedCustom];
+    return { allFields: [...usedCore, ...usedCustom], rawCustomKeys: Array.from(customKeys) };
   }, [students]);
 
   const filteredStudents = useMemo(() => {
@@ -543,7 +543,7 @@ export default function StudentsPage() {
                 </div>
 
                 {/* Dynamically derived fields — only fields this school actually uses */}
-                {createFormFields.map(({ key, label, isCustom }: any) => {
+                {createFormFields.allFields.map(({ key, label, isCustom }: any) => {
                   const stateKey = isCustom ? key : key;
                   return (
                     <div key={key}>
@@ -750,7 +750,9 @@ export default function StudentsPage() {
                       <option value="roll_number">Roll Number</option>
                       <option value="aadhar_number">Aadhar Number</option>
                       <option value="name">Exact Name</option>
-                      {/* Add custom fields from current schema if you want, but core is safest */}
+                      {createFormFields.rawCustomKeys.map((k) => (
+                        <option key={k} value={k}>Custom Field: {k}</option>
+                      ))}
                     </select>
                     <p className="text-xs text-gray-500 mt-1.5">If you select Admission Number, the file "1024.jpg" will be assigned to the student with Admission No 1024.</p>
                   </div>
