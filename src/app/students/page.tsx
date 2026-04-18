@@ -659,78 +659,69 @@ export default function StudentsPage() {
 
                 {/* Additional / Custom fields */}
                 {(() => {
-                  const coreKeys = ["id", "school_id", "created_at", "name", "class", "section", "roll_number", "admission_number", "photo_url", "custom_data", "school_uid", "student_uid"];
-                  const schemaKeys = ["dob", "fathers_name", "mothers_name", "blood_group", "phone", "aadhar_number", "address", "house", "height", "weight"];
+                  const coreKeys = ["id", "school_id", "created_at", "name", "class", "section", "roll_number", "admission_number", "photo_url", "custom_data"];
                   
-                  // Native DB fields (excluding core)
-                  const extraNativeFields = Object.entries(editStudent)
-                    .filter(([k]) => schemaKeys.includes(k) && !coreKeys.includes(k));
-                    
-                  // Custom Data fields
-                  const customFields = Object.entries(editStudent.custom_data || {});
-                  
-                  const allAdditional = [...extraNativeFields, ...customFields].filter(([_, v]) => v != null && v !== "");
+                  // These are the "Standard" columns we always want to show if possible
+                  const schoolSchema = [
+                    { key: "fathers_name", label: "Father's Name" },
+                    { key: "mothers_name", label: "Mother's Name" },
+                    { key: "dob", label: "Date of Birth" },
+                    { key: "phone", label: "Phone Number" },
+                    { key: "address", label: "Address" },
+                    { key: "blood_group", label: "Blood Group" },
+                    { key: "aadhar_number", label: "Aadhar Number" },
+                    { key: "house", label: "House/Team" },
+                    { key: "height", label: "Height" },
+                    { key: "weight", label: "Weight" },
+                  ];
 
-                  // Always ensure schema keys are present (even if empty) if they were in the excel
-                  // Actually, just showing what's populated or part of schemaKeys is safest.
-                  // By default Supabase returns schemaKeys as null if empty. Let's show all schema keys and all populated custom keys.
-                  const displayFields: [string, any][] = [];
-                  schemaKeys.forEach(key => {
-                     displayFields.push([key, editStudent[key]]);
-                  });
-                  customFields.forEach(([key, val]) => {
-                     if (!schemaKeys.includes(key)) {
-                         displayFields.push([key, val]);
-                     }
-                  });
+                  // Collect current values for standard schema
+                  const schemaFields = schoolSchema.map(item => ({
+                    ...item,
+                    value: editStudent[item.key] || "",
+                    isCustom: false
+                  }));
 
-                  // Filter out completely empty null fields unless they are custom
-                  const finalFieldsToRender = displayFields.filter(([k, v]) => (v != null && v !== "") || customFields.some(([ck]) => ck === k));
+                  // Collect anything else lurking in custom_data
+                  const customFields = Object.entries(editStudent.custom_data || {}).map(([key, value]) => ({
+                    key,
+                    label: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    value: value || "",
+                    isCustom: true
+                  }));
 
-                  if (finalFieldsToRender.length === 0) return null;
-
-                  const formatLabel = (key: string) => {
-                    const lookup: Record<string, string> = {
-                      dob: "Date of Birth",
-                      fathers_name: "Father's Name",
-                      mothers_name: "Mother's Name",
-                      blood_group: "Blood Group",
-                      phone: "Phone Number",
-                      aadhar_number: "Aadhar Number",
-                      photo: "Photo Attachment",
-                      address: "Address",
-                      house: "House/Team",
-                      height: "Height",
-                      weight: "Weight"
-                    };
-                    if (lookup[key]) return lookup[key];
-                    return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                  };
+                  // Combine and filter (we show all schema fields, and all populated custom fields)
+                  const allToRender = [
+                    ...schemaFields,
+                    ...customFields.filter(cf => !schoolSchema.some(ss => ss.key === cf.key))
+                  ];
 
                   return (
                     <div className="pt-4 border-t border-gray-100">
                       <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Additional Details</h4>
-                      <div className="grid grid-cols-2 gap-3">
-                        {finalFieldsToRender.map(([key, value]) => (
-                          <div key={key}>
-                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 flex items-center justify-between">
-                              {formatLabel(key)}
-                              {!schemaKeys.includes(key) && <span className="text-[9px] text-gray-300 ml-1 font-normal">(Custom)</span>}
+                      <div className="grid grid-cols-2 gap-4">
+                        {allToRender.map((field) => (
+                          <div key={field.key} className={field.key === 'address' ? 'col-span-2' : ''}>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center">
+                              {field.label}
+                              {field.isCustom && <span className="ml-1 text-[8px] px-1 bg-gray-100 rounded text-gray-400 font-normal">Custom</span>}
                             </label>
                             <input
                               type="text"
-                              value={(value as string) || ""}
+                              value={field.value as string}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                if (schemaKeys.includes(key)) {
-                                  setEditStudent({ ...editStudent, [key]: val });
+                                if (!field.isCustom) {
+                                  setEditStudent({ ...editStudent, [field.key]: val });
                                 } else {
-                                  const newCustom = { ...editStudent.custom_data, [key]: val };
-                                  setEditStudent({ ...editStudent, custom_data: newCustom });
+                                  setEditStudent({ 
+                                    ...editStudent, 
+                                    custom_data: { ...editStudent.custom_data, [field.key]: val } 
+                                  });
                                 }
                               }}
-                              className="w-full px-3 py-2 border border-gray-100 bg-gray-50 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                              placeholder={`Enter ${formatLabel(key).toLowerCase()}`}
+                              className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none transition-all placeholder:text-gray-300"
+                              placeholder={`Enter ${field.label.toLowerCase()}...`}
                             />
                           </div>
                         ))}
