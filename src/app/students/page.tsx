@@ -149,22 +149,35 @@ export default function StudentsPage() {
           body: formData,
         });
       }
-      const updateData: any = {
-        name: editStudent.name,
-        class: editStudent.class,
-        section: editStudent.section,
-        roll_number: editStudent.roll_number,
-        custom_data: editStudent.custom_data,
-      };
+
+      // ── DYNAMIC PAYLOAD ──
+      // Instead of whitelisting 5 fields, we send EVERYTHING that is useful
+      // but exclude internal metadata like 'created_at' or 'school_id'
+      const exclude = ["id", "school_id", "created_at", "photo_url", "school_uid", "student_uid"];
+      const updateData: any = {};
+      
+      Object.keys(editStudent).forEach(key => {
+        if (!exclude.includes(key)) {
+          updateData[key] = editStudent[key];
+        }
+      });
+
       if (editStudent.photo_url === null && !newPhotoFile) {
         updateData.photo_url = null;
       }
-      await fetch(`${API_URL}/student/${editStudent.id}`, {
+
+      const res = await fetch(`${API_URL}/student/${editStudent.id}`, {
         method: "PUT",
         headers: adminHeaders,
         body: JSON.stringify(updateData),
       });
-      fetchStudents(activeSchool.id);
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Update failed.");
+      }
+
+      await fetchStudents(activeSchool.id);
       setEditStudent(null);
       setNewPhotoFile(null);
     } catch (error: any) {
