@@ -141,6 +141,22 @@ export default function Home() {
     setSchoolName("");
   };
 
+  const downloadTemplate = () => {
+    const headers = [
+      "Name", "Class", "Section", "Roll Number", "Admission Number", 
+      "Date of Birth", "Father's Name", "Mother's Name", "Blood Group", 
+      "Phone", "Aadhar Number", "Address", "House", "Height", "Weight", "Photo"
+    ];
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "BizeraID_Template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-8">
       <header className="mb-10 text-center">
@@ -222,8 +238,18 @@ export default function Home() {
               <p className="text-base text-gray-600 mb-2 font-medium">
                 {file ? file.name : "Drag and drop your Excel sheet here"}
               </p>
-              <p className="text-xs text-gray-400 mb-6">
-                Supports .xlsx or .csv
+              <p className="text-xs text-gray-400 mb-6 flex flex-col sm:flex-row items-center justify-center gap-1.5">
+                <span>Supports .xlsx or .csv —</span>
+                <button 
+                  type="button" 
+                  onClick={downloadTemplate} 
+                  className="text-indigo-600 font-bold hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Template
+                </button>
               </p>
               
               <label className="cursor-pointer bg-gray-900 text-white hover:bg-gray-800 px-6 py-2.5 rounded-full font-medium text-sm transition-colors shadow-sm inline-block">
