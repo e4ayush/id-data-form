@@ -33,6 +33,13 @@ export default function StudentsPage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Bulk Photo Upload States
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [bulkPhotos, setBulkPhotos] = useState<FileList | null>(null);
+  const [matchColumn, setMatchColumn] = useState<string>("admission_number");
+  const [isUploadingBulk, setIsUploadingBulk] = useState(false);
+  const [bulkUploadResult, setBulkUploadResult] = useState<any>(null);
+
   // Error feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -164,6 +171,41 @@ export default function StudentsPage() {
       setErrorMsg(error.message || "Save failed. Please try again.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleBulkUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeSchool || !bulkPhotos || bulkPhotos.length === 0) return;
+    
+    setIsUploadingBulk(true);
+    setBulkUploadResult(null);
+    setErrorMsg(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append("match_column", matchColumn);
+      for (let i = 0; i < bulkPhotos.length; i++) {
+        formData.append("files", bulkPhotos[i]);
+      }
+
+      const res = await fetch(`${API_URL}/upload-photos/${activeSchool.id}`, {
+        method: "POST",
+        headers: { "X-Admin-Secret": ADMIN_SECRET },
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.detail || "Bulk upload failed.");
+      }
+      
+      setBulkUploadResult(result);
+      fetchStudents(activeSchool.id);
+    } catch (error: any) {
+      setErrorMsg(error.message || "Upload failed. Please try again.");
+    } finally {
+      setIsUploadingBulk(false);
     }
   };
 
@@ -374,8 +416,17 @@ export default function StudentsPage() {
                 {filteredStudents.length} result{filteredStudents.length !== 1 ? "s" : ""}
               </div>
               <button
+                onClick={() => setShowBulkUpload(true)}
+                className="px-4 py-2 bg-white hover:bg-gray-50 text-indigo-600 border border-indigo-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Bulk Photos
+              </button>
+              <button
                 onClick={() => setShowCreate(true)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
               >
                 <span className="text-base leading-none">+</span> New Student
               </button>
@@ -649,10 +700,156 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {/* ── Bulk Photo Upload Modal ── */}
+      {showBulkUpload && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-gray-100 flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h3 className="text-base font-bold text-gray-900">Bulk Photo Upload</h3>
+              </div>
+              <button 
+                onClick={() => { setShowBulkUpload(false); setBulkUploadResult(null); setBulkPhotos(null); }} 
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 text-xl leading-none transition-colors"
+                disabled={isUploadingBulk}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto">
+              {!bulkUploadResult ? (
+                <form id="bulkUploadForm" onSubmit={handleBulkUpload} className="space-y-5">
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800">
+                    <p className="font-semibold mb-1 flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      How it works
+                    </p>
+                    <ul className="list-disc leading-relaxed pl-5 space-y-1 mt-2 text-amber-700/90">
+                      <li>Select a folder containing student photos.</li>
+                      <li>Name each photo after a unique field (e.g., <code className="text-amber-900 bg-amber-100 px-1 rounded">12345.jpg</code> to match Admission No).</li>
+                      <li>The system will automatically find the student, compress the image under 100KB, and securely save it!</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Match Filenames To</label>
+                    <select
+                      value={matchColumn}
+                      onChange={(e) => setMatchColumn(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                    >
+                      <option value="admission_number">Admission Number</option>
+                      <option value="roll_number">Roll Number</option>
+                      <option value="aadhar_number">Aadhar Number</option>
+                      <option value="name">Exact Name</option>
+                      {/* Add custom fields from current schema if you want, but core is safest */}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1.5">If you select Admission Number, the file "1024.jpg" will be assigned to the student with Admission No 1024.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Select Photo Folder</label>
+                    <div className="relative group">
+                      <input
+                        type="file"
+                        // @ts-ignore: webkitdirectory is non-standard but works in all modern browsers
+                        webkitdirectory="" 
+                        directory=""
+                        multiple
+                        onChange={(e) => setBulkPhotos(e.target.files)}
+                        className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer border border-gray-200 rounded-lg p-1 transition-colors group-hover:border-indigo-300"
+                      />
+                    </div>
+                    {bulkPhotos && bulkPhotos.length > 0 && (
+                      <p className="text-xs font-medium text-emerald-600 mt-2 flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        {bulkPhotos.length} files selected
+                      </p>
+                    )}
+                  </div>
+                </form>
+              ) : (
+                <div className="text-center py-4">
+                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <h4 className="text-xl font-bold text-gray-900 mb-2">Upload Complete</h4>
+                  <p className="text-sm text-gray-600 mb-6">{bulkUploadResult.message}</p>
+                  
+                  <div className="grid grid-cols-2 gap-4 mb-6 text-left">
+                     <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                        <p className="text-xs font-semibold text-gray-400 uppercase">Successfully Matched</p>
+                        <p className="text-2xl font-black text-emerald-600">{bulkUploadResult.matched}</p>
+                     </div>
+                     <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                        <p className="text-xs font-semibold text-gray-400 uppercase">Skipped / No Match</p>
+                        <p className="text-2xl font-black text-amber-500">{bulkUploadResult.skipped}</p>
+                     </div>
+                  </div>
+
+                  {bulkUploadResult.errors && bulkUploadResult.errors.length > 0 && (
+                    <div className="text-left bg-red-50 p-3 rounded-xl border border-red-100 text-xs">
+                      <p className="font-bold text-red-700 mb-2 uppercase tracking-wide">Errors / Skipped Files:</p>
+                      <ul className="list-disc pl-5 space-y-1 text-red-600/90 font-mono text-[10px]">
+                        {bulkUploadResult.errors.map((err: string, i: number) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 bg-gray-50/50 rounded-b-2xl">
+              {!bulkUploadResult ? (
+                <>
+                  <button onClick={() => { setShowBulkUpload(false); setBulkPhotos(null); }} className="flex-1 px-4 py-2.5 text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-medium text-sm transition-colors" disabled={isUploadingBulk}>Cancel</button>
+                  <button 
+                    form="bulkUploadForm" 
+                    type="submit" 
+                    disabled={isUploadingBulk || !bulkPhotos || bulkPhotos.length === 0} 
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isUploadingBulk ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Processing...
+                      </>
+                    ) : "Start Upload"}
+                  </button>
+                </>
+              ) : (
+                <button 
+                  onClick={() => { setShowBulkUpload(false); setBulkUploadResult(null); setBulkPhotos(null); }} 
+                  className="w-full bg-gray-900 hover:bg-black text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+                >
+                  Close & Refresh List
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Lightbox ── */}
       {fullSizeImage && (
         <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 cursor-zoom-out"
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4 cursor-zoom-out"
           onClick={() => setFullSizeImage(null)}
         >
           <img src={fullSizeImage} className="max-w-full max-h-full rounded-xl shadow-2xl" />
