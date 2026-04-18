@@ -461,17 +461,20 @@ export default function StudentsPage() {
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+              <div className="overflow-x-auto overflow-y-hidden custom-scrollbar">
+                <table className="w-full text-sm min-w-[1000px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-14">Photo</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Name</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Class</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Roll No</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Adm. No</th>
-                      <th className="px-5 py-3.5 text-right text-xs font-bold text-gray-400 uppercase tracking-wider">Actions</th>
+                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider min-w-[180px]">Name</th>
+                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-28">Class</th>
+                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-24">Roll No</th>
+                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-28">Adm. No</th>
+                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider min-w-[160px]">Father's Name</th>
+                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-32">DOB</th>
+                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-36">Phone</th>
+                      <th className="px-5 py-3.5 text-right text-xs font-bold text-gray-400 uppercase tracking-wider w-24">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -509,6 +512,15 @@ export default function StudentsPage() {
                         </td>
                         <td className="px-5 py-3.5 text-gray-500 font-mono text-xs">
                           {student.admission_number || <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-5 py-3.5 text-gray-600 text-xs">
+                          {student.fathers_name || <span className="text-gray-300 italic">Not set</span>}
+                        </td>
+                        <td className="px-5 py-3.5 text-gray-500 font-mono text-xs">
+                          {student.dob || <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-5 py-3.5 text-indigo-600 font-semibold text-xs">
+                          {student.phone || <span className="text-gray-300 font-normal">—</span>}
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
