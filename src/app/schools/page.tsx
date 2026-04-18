@@ -57,6 +57,31 @@ export default function SchoolsManagementPage() {
     }
   };
 
+  const handleResetPassword = async (id: string, name: string) => {
+    const confirmReset = window.confirm(`Are you sure you want to reset the password for "${name}"?`);
+    if (!confirmReset) return;
+
+    try {
+      const res = await fetch(`${API_URL}/schools/${id}/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Secret": process.env.NEXT_PUBLIC_ADMIN_SECRET || ""
+        }
+      });
+      
+      const result = await res.json();
+      if (res.ok) {
+        alert(`Success! Tell the school admin their new credentials:\n\nEmail: ${result.email}\nNew Password: ${result.new_password}\n\nPlease copy these now, they will not be shown again!`);
+      } else {
+        alert(`Failed: ${result.detail || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Failed to reset password:", error);
+      alert("Failed to reset password. Check console.");
+    }
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <header className="mb-8">
@@ -98,6 +123,7 @@ export default function SchoolsManagementPage() {
                   <thead className="bg-white border-b border-gray-100 text-gray-500 uppercase tracking-wider text-xs">
                     <tr>
                       <th className="px-6 py-4 font-semibold">School Name</th>
+                      <th className="px-6 py-4 font-semibold">Login Email</th>
                       <th className="px-6 py-4 font-semibold">Database ID</th>
                       <th className="px-6 py-4 font-semibold text-right">Actions</th>
                     </tr>
@@ -105,7 +131,7 @@ export default function SchoolsManagementPage() {
                   <tbody className="divide-y divide-gray-100">
                     {schools.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-6 py-12 text-center text-gray-400">
+                        <td colSpan={4} className="px-6 py-12 text-center text-gray-400">
                           No schools registered yet.
                         </td>
                       </tr>
@@ -113,13 +139,16 @@ export default function SchoolsManagementPage() {
                       schools.map((school) => (
                         <tr key={school.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-6 py-4 font-bold text-gray-900">{school.name}</td>
+                          <td className="px-6 py-4 text-gray-600 font-medium">
+                            {school.login_email || 'Not set'}
+                          </td>
                           <td className="px-6 py-4 text-gray-400 font-mono text-xs truncate max-w-[150px]">
                             {school.id}
                           </td>
                           <td className="px-6 py-4 text-right flex justify-end gap-2">
                             <button 
                               className="text-gray-600 hover:text-indigo-600 font-medium text-xs bg-gray-50 hover:bg-indigo-50 px-3 py-1.5 rounded-md transition-colors border border-gray-200 hover:border-indigo-200"
-                              onClick={() => alert('Password reset endpoint coming soon!')}
+                              onClick={() => handleResetPassword(school.id, school.name)}
                             >
                               Reset Pass
                             </button>
