@@ -657,28 +657,87 @@ export default function StudentsPage() {
                     ))}
                 </div>
 
-                {/* Custom fields */}
-                {Object.keys(editStudent.custom_data || {}).length > 0 && (
-                  <div className="pt-4 border-t border-gray-100">
-                    <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Additional Fields</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(editStudent.custom_data).map(([key, value]) => (
-                        <div key={key}>
-                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{key}</label>
-                          <input
-                            type="text"
-                            value={(value as string) || ""}
-                            onChange={(e) => {
-                              const newCustom = { ...editStudent.custom_data, [key]: e.target.value };
-                              setEditStudent({ ...editStudent, custom_data: newCustom });
-                            }}
-                            className="w-full px-3 py-2 border border-gray-100 bg-gray-50 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          />
-                        </div>
-                      ))}
+                {/* Additional / Custom fields */}
+                {(() => {
+                  const coreKeys = ["id", "school_id", "created_at", "name", "class", "section", "roll_number", "admission_number", "photo_url", "custom_data", "school_uid", "student_uid"];
+                  const schemaKeys = ["dob", "fathers_name", "mothers_name", "blood_group", "phone", "aadhar_number", "address", "house", "height", "weight"];
+                  
+                  // Native DB fields (excluding core)
+                  const extraNativeFields = Object.entries(editStudent)
+                    .filter(([k]) => schemaKeys.includes(k) && !coreKeys.includes(k));
+                    
+                  // Custom Data fields
+                  const customFields = Object.entries(editStudent.custom_data || {});
+                  
+                  const allAdditional = [...extraNativeFields, ...customFields].filter(([_, v]) => v != null && v !== "");
+
+                  // Always ensure schema keys are present (even if empty) if they were in the excel
+                  // Actually, just showing what's populated or part of schemaKeys is safest.
+                  // By default Supabase returns schemaKeys as null if empty. Let's show all schema keys and all populated custom keys.
+                  const displayFields: [string, any][] = [];
+                  schemaKeys.forEach(key => {
+                     displayFields.push([key, editStudent[key]]);
+                  });
+                  customFields.forEach(([key, val]) => {
+                     if (!schemaKeys.includes(key)) {
+                         displayFields.push([key, val]);
+                     }
+                  });
+
+                  // Filter out completely empty null fields unless they are custom
+                  const finalFieldsToRender = displayFields.filter(([k, v]) => (v != null && v !== "") || customFields.some(([ck]) => ck === k));
+
+                  if (finalFieldsToRender.length === 0) return null;
+
+                  const formatLabel = (key: string) => {
+                    const lookup: Record<string, string> = {
+                      dob: "Date of Birth",
+                      fathers_name: "Father's Name",
+                      mothers_name: "Mother's Name",
+                      blood_group: "Blood Group",
+                      phone: "Phone Number",
+                      aadhar_number: "Aadhar Number",
+                      photo: "Photo Attachment",
+                      address: "Address",
+                      house: "House/Team",
+                      height: "Height",
+                      weight: "Weight"
+                    };
+                    if (lookup[key]) return lookup[key];
+                    return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                  };
+
+                  return (
+                    <div className="pt-4 border-t border-gray-100">
+                      <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Additional Details</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        {finalFieldsToRender.map(([key, value]) => (
+                          <div key={key}>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 flex items-center justify-between">
+                              {formatLabel(key)}
+                              {!schemaKeys.includes(key) && <span className="text-[9px] text-gray-300 ml-1 font-normal">(Custom)</span>}
+                            </label>
+                            <input
+                              type="text"
+                              value={(value as string) || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (schemaKeys.includes(key)) {
+                                  setEditStudent({ ...editStudent, [key]: val });
+                                } else {
+                                  const newCustom = { ...editStudent.custom_data, [key]: val };
+                                  setEditStudent({ ...editStudent, custom_data: newCustom });
+                                }
+                              }}
+                              className="w-full px-3 py-2 border border-gray-100 bg-gray-50 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                              placeholder={`Enter ${formatLabel(key).toLowerCase()}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </form>
             </div>
 
