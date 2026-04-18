@@ -240,12 +240,15 @@ export default function StudentsPage() {
 
     if (students.length === 0) {
       // No data yet — show a minimal sensible set
-      return [
-        { key: "class", label: "Class" },
-        { key: "section", label: "Section" },
-        { key: "roll_number", label: "Roll No" },
-        { key: "admission_number", label: "Admission No" },
-      ];
+      return {
+        allFields: [
+          { key: "class", label: "Class" },
+          { key: "section", label: "Section" },
+          { key: "roll_number", label: "Roll No" },
+          { key: "admission_number", label: "Admission No" },
+        ],
+        rawCustomKeys: []
+      };
     }
 
     // Which core fields have at least one non-empty value?
