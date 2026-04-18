@@ -702,7 +702,7 @@ export default function StudentsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         {allToRender.map((field) => (
                           <div key={field.key} className={field.key === 'address' ? 'col-span-2' : ''}>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center">
+                            <label className="flex items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                               {field.label}
                               {field.isCustom && <span className="ml-1 text-[8px] px-1 bg-gray-100 rounded text-gray-400 font-normal">Custom</span>}
                             </label>
@@ -904,7 +904,7 @@ export default function StudentsPage() {
       {/* ── Lightbox ── */}
       {fullSizeImage && (
         <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4 cursor-zoom-out"
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-60 p-4 cursor-zoom-out"
           onClick={() => setFullSizeImage(null)}
         >
           <img src={fullSizeImage} className="max-w-full max-h-full rounded-xl shadow-2xl" />
