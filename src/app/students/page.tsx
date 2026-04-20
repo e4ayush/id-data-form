@@ -521,9 +521,7 @@ export default function StudentsPage() {
 
             {/* Results count & Actions */}
             <div className="ml-auto flex items-center gap-4">
-              <div className="shrink-0 text-xs font-semibold text-gray-400 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg whitespace-nowrap">
-                {filteredStudents.length} result{filteredStudents.length !== 1 ? "s" : ""}
-              </div>
+
               <button
                 onClick={handleDownloadPhotos}
                 disabled={isDownloadingPhotos}
