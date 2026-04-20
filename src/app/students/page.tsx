@@ -40,6 +40,10 @@ export default function StudentsPage() {
   const [isUploadingBulk, setIsUploadingBulk] = useState(false);
   const [bulkUploadResult, setBulkUploadResult] = useState<any>(null);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+
   // Error feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -294,6 +298,52 @@ export default function StudentsPage() {
     return list;
   }, [students, selectedClass, searchQuery]);
 
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedClass, itemsPerPage]);
+
+  const paginatedStudents = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredStudents.slice(start, start + itemsPerPage);
+  }, [filteredStudents, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+
+  const handleDownloadExcel = async () => {
+    if (!activeSchool) return;
+    try {
+      const res = await fetch(`${API_URL}/export/${activeSchool.id}`, { headers: adminHeaders });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.detail || "Export failed.");
+      const data = result.data || [];
+      if (data.length === 0) return alert("No data to export");
+
+      const headers: string[] = Array.from(new Set(data.flatMap((row: any) => Object.keys(row))));
+      
+      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + 
+        headers.join(",") + "\n" +
+        data.map((row: any) => 
+          headers.map(field => {
+            let val = row[field];
+            if (val === null || val === undefined) val = "";
+            val = String(val).replace(/"/g, '""');
+            return `"${val}"`;
+          }).join(",")
+        ).join("\n");
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `${activeSchool.name}_Students.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error: any) {
+      setErrorMsg(error.message || "Failed to download Excel.");
+    }
+  };
+
   const classBreakdown = useMemo(() => {
     return availableClasses.map((cls) => ({
       cls,
@@ -357,17 +407,30 @@ export default function StudentsPage() {
           )}
         </div>
 
-        {/* School picker */}
-        <select
-          value={activeSchool?.id || ""}
-          onChange={handleSchoolChange}
-          className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm min-w-[220px]"
-        >
-          <option value="" disabled>Select a school</option>
-          {schools.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
+        {/* School picker and Export */}
+        <div className="flex items-center gap-3">
+          <select
+            value={activeSchool?.id || ""}
+            onChange={handleSchoolChange}
+            className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm min-w-[220px]"
+          >
+            <option value="" disabled>Select a school</option>
+            {schools.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          {activeSchool && (
+            <button
+              onClick={handleDownloadExcel}
+              className="px-4 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download Excel
+            </button>
+          )}
+        </div>
       </div>
 
       {!activeSchool ? (
@@ -478,7 +541,7 @@ export default function StudentsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredStudents.map((student) => (
+                    {paginatedStudents.map((student) => (
                       <tr key={student.id} className="hover:bg-gray-50/60 transition-colors group">
                         <td className="px-5 py-3.5">
                           {student.photo_url ? (
@@ -542,6 +605,41 @@ export default function StudentsPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              
+              {/* ── Pagination Controls ── */}
+              <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <span>Show</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                  >
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <span>per page</span>
+                </div>
+                <div className="text-sm text-gray-500 font-medium">
+                  Showing {filteredStudents.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredStudents.length)} of {filteredStudents.length} entries
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                    className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm disabled:opacity-50 hover:bg-gray-50 font-medium transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm disabled:opacity-50 hover:bg-gray-50 font-medium transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
           )}
