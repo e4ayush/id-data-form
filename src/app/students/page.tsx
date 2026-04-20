@@ -44,6 +44,9 @@ export default function StudentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
 
+  // Download states
+  const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
+
   // Error feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -344,6 +347,31 @@ export default function StudentsPage() {
     }
   };
 
+  const handleDownloadPhotos = async () => {
+    if (!activeSchool) return;
+    setIsDownloadingPhotos(true);
+    try {
+      const res = await fetch(`${API_URL}/download-photos/${activeSchool.id}`, { headers: adminHeaders });
+      if (!res.ok) throw new Error("Failed to download photos archive");
+      
+      const blob = await res.blob();
+      if (blob.size === 0) throw new Error("No photos available for this school");
+
+      const encodedUri = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = encodedUri;
+      link.download = `Photos_${activeSchool.name.replace(/\\s+/g, '_')}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(encodedUri);
+    } catch (error: any) {
+      setErrorMsg(error.message || "Failed to download Photos.");
+    } finally {
+      setIsDownloadingPhotos(false);
+    }
+  };
+
   const classBreakdown = useMemo(() => {
     return availableClasses.map((cls) => ({
       cls,
@@ -494,6 +522,16 @@ export default function StudentsPage() {
               <div className="shrink-0 text-xs font-semibold text-gray-400 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg whitespace-nowrap">
                 {filteredStudents.length} result{filteredStudents.length !== 1 ? "s" : ""}
               </div>
+              <button
+                onClick={handleDownloadPhotos}
+                disabled={isDownloadingPhotos}
+                className="px-4 py-2 bg-white hover:bg-gray-50 text-indigo-600 border border-indigo-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shrink-0 shadow-sm disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {isDownloadingPhotos ? "Packaging..." : "Download Photos"}
+              </button>
               <button
                 onClick={() => setShowBulkUpload(true)}
                 className="px-4 py-2 bg-white hover:bg-gray-50 text-indigo-600 border border-indigo-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
