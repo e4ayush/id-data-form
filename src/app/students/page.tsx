@@ -505,18 +505,25 @@ export default function StudentsPage() {
               )}
             </div>
 
-            {/* Class filter pills */}
-            <div className="flex gap-2 flex-wrap">
-              <FilterPill label="All" active={selectedClass === "All"} onClick={() => setSelectedClass("All")} count={students.length} />
-              {classBreakdown.map(({ cls, count }) => (
-                <FilterPill
-                  key={cls as string}
-                  label={`Class ${cls}`}
-                  active={selectedClass === cls}
-                  onClick={() => setSelectedClass(cls as string)}
-                  count={count}
-                />
-              ))}
+            {/* Class filter dropdown */}
+            <div className="relative shrink-0">
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-4 pr-10 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm cursor-pointer"
+              >
+                <option value="All">All Classes ({students.length})</option>
+                {classBreakdown.map(({ cls, count }) => (
+                  <option key={cls as string} value={cls as string}>
+                    Class {cls} ({count})
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
             </div>
 
             {/* Results count & Actions */}
@@ -804,7 +811,6 @@ export default function StudentsPage() {
                     { key: "roll_number", label: "Roll No" },
                     { key: "admission_number", label: "Adm. No" },
                   ]
-                    .filter(({ key }) => editStudent[key] != null && editStudent[key] !== "")
                     .map(({ key, label }) => (
                       <div key={key}>
                         <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</label>
