@@ -67,8 +67,9 @@ export default function StudentsPage() {
       } else {
         setIsLoading(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch schools", error);
+      setErrorMsg(error.message || "Failed to load schools. Please check your connection.");
       setIsLoading(false);
     }
   };
@@ -83,8 +84,9 @@ export default function StudentsPage() {
       setSelectedClass("All");
       setSearchQuery("");
       setLastRefreshed(new Date());
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch students", error);
+      setErrorMsg(error.message || "Failed to load students. Please try again.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
