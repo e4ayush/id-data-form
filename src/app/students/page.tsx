@@ -10,14 +10,33 @@ const adminHeaders = {
   "X-Admin-Secret": ADMIN_SECRET,
 };
 
+const INTERNAL_CUSTOM_KEYS = new Set(["__bizera_column_schema"]);
+
+const FALLBACK_SCHEMA = [
+  { header: "Name", key: "name", is_custom: false, is_photo: false },
+  { header: "Class", key: "class", is_custom: false, is_photo: false },
+  { header: "Section", key: "section", is_custom: false, is_photo: false },
+  { header: "Roll Number", key: "roll_number", is_custom: false, is_photo: false },
+  { header: "Admission Number", key: "admission_number", is_custom: false, is_photo: false },
+];
+
+type ColumnSchema = {
+  header: string;
+  key: string;
+  is_custom?: boolean;
+  is_photo?: boolean;
+};
+
 export default function StudentsPage() {
   const [schools, setSchools] = useState<any[]>([]);
   const [activeSchool, setActiveSchool] = useState<any | null>(null);
   const [students, setStudents] = useState<any[]>([]);
+  const [columnSchema, setColumnSchema] = useState<ColumnSchema[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [selectedClass, setSelectedClass] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
 
   const [fullSizeImage, setFullSizeImage] = useState<string | null>(null);
   const [editStudent, setEditStudent] = useState<any | null>(null);
@@ -81,8 +100,10 @@ export default function StudentsPage() {
       const res = await fetch(`${API_URL}/students/${schoolId}`, { headers: adminHeaders });
       const result = await res.json();
       setStudents(result.data || []);
+      setColumnSchema(result.column_schema || []);
       setSelectedClass("All");
       setSearchQuery("");
+      setSelectedStudentIds(new Set());
       setLastRefreshed(new Date());
     } catch (error: any) {
       console.error("Failed to fetch students", error);
@@ -95,13 +116,30 @@ export default function StudentsPage() {
 
   const handleCreateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newStudent.name || !activeSchool) return;
+    if (!activeSchool) return;
     setIsCreating(true);
     try {
+      const payload: Record<string, any> = { school_id: activeSchool.id };
+      const customData: Record<string, string> = {};
+      const schema = usableSchema.filter((field) => !field.is_photo);
+
+      schema.forEach((field) => {
+        const value = newStudent[field.key] || "";
+        if (field.is_custom) {
+          customData[field.key] = value;
+        } else {
+          payload[field.key] = value;
+        }
+      });
+
+      payload.name = payload.name || newStudent.name || "Unknown";
+      payload.class = payload.class || "";
+      payload.custom_data = customData;
+
       const res = await fetch(`${API_URL}/student`, {
         method: "POST",
         headers: adminHeaders,
-        body: JSON.stringify({ ...newStudent, school_id: activeSchool.id, custom_data: {} }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const result = await res.json();
@@ -141,6 +179,56 @@ export default function StudentsPage() {
       setStudents(students.filter((s) => s.id !== id));
     } catch (error: any) {
       setErrorMsg(error.message || "Delete failed. Please try again.");
+    }
+  };
+
+  const toggleStudentSelection = (id: string) => {
+    setSelectedStudentIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectVisible = () => {
+    setSelectedStudentIds((previous) => {
+      const visibleIds = filteredStudents.map((student) => student.id);
+      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => previous.has(id));
+      const next = new Set(previous);
+
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedStudentIds.size === 0) return;
+    const count = selectedStudentIds.size;
+    if (!window.confirm(`Delete ${count} selected student${count === 1 ? "" : "s"}? This cannot be undone.`)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/students/bulk-delete`, {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify({ ids: Array.from(selectedStudentIds) }),
+      });
+      if (!res.ok) {
+        const result = await res.json();
+        throw new Error(result.detail || "Bulk delete failed on the server.");
+      }
+
+      setStudents((current) => current.filter((student) => !selectedStudentIds.has(student.id)));
+      setSelectedStudentIds(new Set());
+    } catch (error: any) {
+      setErrorMsg(error.message || "Bulk delete failed. Please try again.");
     }
   };
 
@@ -239,54 +327,40 @@ export default function StudentsPage() {
     [students]
   );
 
+  const usableSchema = useMemo(
+    () => (columnSchema.length > 0 ? columnSchema : FALLBACK_SCHEMA),
+    [columnSchema]
+  );
+
+  const dataColumns = useMemo(
+    () => usableSchema.filter((field) => !field.is_photo),
+    [usableSchema]
+  );
+
+  const getFieldValue = (student: any, field: ColumnSchema) => {
+    if (field.is_custom) {
+      return student.custom_data?.[field.key] ?? "";
+    }
+    return student[field.key] ?? "";
+  };
+
   // Derive the schema for the "New Student" form from existing students.
   // Core fields that actually appear with a value in ANY student are shown.
   // Custom fields present in ANY student's custom_data are also shown.
   const createFormFields = useMemo(() => {
-    const CORE_FIELDS = [
-      { key: "class", label: "Class" },
-      { key: "section", label: "Section" },
-      { key: "roll_number", label: "Roll No" },
-      { key: "admission_number", label: "Admission No" },
-      { key: "dob", label: "Date of Birth" },
-      { key: "fathers_name", label: "Father's Name" },
-      { key: "mothers_name", label: "Mother's Name" },
-      { key: "blood_group", label: "Blood Group" },
-      { key: "phone", label: "Phone" },
-      { key: "aadhar_number", label: "Aadhar No" },
-      { key: "address", label: "Address" },
-      { key: "house", label: "House" },
-      { key: "height", label: "Height" },
-      { key: "weight", label: "Weight" },
-    ];
+    const fields = dataColumns.map((field) => ({
+      key: field.key,
+      label: field.header,
+      isCustom: !!field.is_custom,
+    }));
 
-    if (students.length === 0) {
-      // No data yet — show a minimal sensible set
-      return {
-        allFields: [
-          { key: "class", label: "Class" },
-          { key: "section", label: "Section" },
-          { key: "roll_number", label: "Roll No" },
-          { key: "admission_number", label: "Admission No" },
-        ],
-        rawCustomKeys: []
-      };
-    }
-
-    // Which core fields have at least one non-empty value?
-    const usedCore = CORE_FIELDS.filter((f) =>
-      students.some((s) => s[f.key] != null && s[f.key] !== "")
-    );
-
-    // Which custom_data keys appear in at least one student?
-    const customKeys = new Set<string>();
-    students.forEach((s) => {
-      Object.keys(s.custom_data || {}).forEach((k) => customKeys.add(k));
-    });
-    const usedCustom = Array.from(customKeys).map((k) => ({ key: `custom_${k}`, label: k, isCustom: true }));
-
-    return { allFields: [...usedCore, ...usedCustom], rawCustomKeys: Array.from(customKeys) };
-  }, [students]);
+    return {
+      allFields: fields,
+      rawCustomKeys: dataColumns
+        .filter((field) => field.is_custom && !INTERNAL_CUSTOM_KEYS.has(field.key))
+        .map((field) => field.key),
+    };
+  }, [dataColumns]);
 
   const filteredStudents = useMemo(() => {
     let list = selectedClass === "All" ? students : students.filter((s) => s.class === selectedClass);
@@ -314,6 +388,7 @@ export default function StudentsPage() {
   }, [filteredStudents, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const allFilteredSelected = filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIds.has(student.id));
 
   const handleDownloadExcel = async () => {
     if (!activeSchool) return;
@@ -324,7 +399,12 @@ export default function StudentsPage() {
       const data = result.data || [];
       if (data.length === 0) return alert("No data to export");
 
-      const headers: string[] = Array.from(new Set(data.flatMap((row: any) => Object.keys(row))));
+      const schemaHeaders = (result.column_schema || [])
+        .map((field: ColumnSchema) => field.header)
+        .filter(Boolean);
+      const headers: string[] = schemaHeaders.length > 0
+        ? schemaHeaders
+        : Array.from(new Set(data.flatMap((row: any) => Object.keys(row))));
       
       const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + 
         headers.join(",") + "\n" +
@@ -353,7 +433,23 @@ export default function StudentsPage() {
     if (!activeSchool) return;
     setIsDownloadingPhotos(true);
     try {
-      const res = await fetch(`${API_URL}/download-photos/${activeSchool.id}`, { headers: adminHeaders });
+      const filenameColumns = usableSchema;
+      const filenameChoices = filenameColumns
+        .map((field) => `${field.header} (${field.key})`)
+        .join("\n");
+      const selectedColumn = window.prompt(
+        `Which column should be used to name the photo files?\n\n${filenameChoices}\n\nType the column key, for example: phone`,
+        filenameColumns.find((field) => field.key === "phone")?.key ||
+          filenameColumns.find((field) => field.key === "photo")?.key ||
+          filenameColumns.find((field) => field.key === "admission_number")?.key ||
+          "name"
+      );
+      if (selectedColumn === null) return;
+
+      const query = selectedColumn.trim()
+        ? `?filename_column=${encodeURIComponent(selectedColumn.trim())}`
+        : "";
+      const res = await fetch(`${API_URL}/download-photos/${activeSchool.id}${query}`, { headers: adminHeaders });
       if (!res.ok) throw new Error("Failed to download photos archive");
       
       const blob = await res.blob();
@@ -528,6 +624,25 @@ export default function StudentsPage() {
 
             {/* Results count & Actions */}
             <div className="ml-auto flex items-center gap-4">
+              {selectedStudentIds.size > 0 && (
+                <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+                  <span className="text-xs font-bold text-red-600">
+                    {selectedStudentIds.size} selected
+                  </span>
+                  <button
+                    onClick={handleBulkDelete}
+                    className="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-md transition-colors"
+                  >
+                    Delete Selected
+                  </button>
+                  <button
+                    onClick={() => setSelectedStudentIds(new Set())}
+                    className="text-xs font-semibold text-red-500 hover:text-red-700"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
 
               <button
                 onClick={handleDownloadPhotos}
@@ -571,23 +686,39 @@ export default function StudentsPage() {
           ) : (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
               <div className="overflow-x-auto overflow-y-hidden custom-scrollbar">
-                <table className="w-full text-sm min-w-[1000px]">
+                <table className="w-full text-sm min-w-[900px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-5 py-3.5 text-left w-12">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={handleSelectVisible}
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          aria-label="Select all filtered students"
+                        />
+                      </th>
                       <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-14">Photo</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider min-w-[180px]">Name</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-28">Class</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-24">Roll No</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-28">Adm. No</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider min-w-[160px]">Father's Name</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-32">DOB</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-36">Phone</th>
+                      {dataColumns.map((field) => (
+                        <th key={field.key} className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider min-w-[140px]">
+                          {field.header}
+                        </th>
+                      ))}
                       <th className="px-5 py-3.5 text-right text-xs font-bold text-gray-400 uppercase tracking-wider w-24">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {paginatedStudents.map((student) => (
-                      <tr key={student.id} className="hover:bg-gray-50/60 transition-colors group">
+                      <tr key={student.id} className={`hover:bg-gray-50/60 transition-colors group ${selectedStudentIds.has(student.id) ? "bg-indigo-50/40" : ""}`}>
+                        <td className="px-5 py-3.5">
+                          <input
+                            type="checkbox"
+                            checked={selectedStudentIds.has(student.id)}
+                            onChange={() => toggleStudentSelection(student.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            aria-label={`Select ${student.name}`}
+                          />
+                        </td>
                         <td className="px-5 py-3.5">
                           {student.photo_url ? (
                             <img
@@ -602,34 +733,20 @@ export default function StudentsPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-5 py-3.5">
-                          <span className="font-semibold text-gray-900">{student.name}</span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className="inline-flex items-center gap-1">
-                            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md text-xs font-semibold border border-indigo-100">
-                              {student.class}
-                            </span>
-                            {student.section && (
-                              <span className="text-gray-400 text-xs font-medium">{student.section}</span>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-500 font-mono text-xs">
-                          {student.roll_number || <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-500 font-mono text-xs">
-                          {student.admission_number || <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-600 text-xs">
-                          {student.fathers_name || <span className="text-gray-300 italic">Not set</span>}
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-500 font-mono text-xs">
-                          {student.dob || <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-5 py-3.5 text-indigo-600 font-semibold text-xs">
-                          {student.phone || <span className="text-gray-300 font-normal">—</span>}
-                        </td>
+                        {dataColumns.map((field) => {
+                          const value = getFieldValue(student, field);
+                          return (
+                            <td key={field.key} className="px-5 py-3.5 text-gray-600 text-xs">
+                              {value ? (
+                                <span className={field.key === "name" ? "font-semibold text-gray-900 text-sm" : ""}>
+                                  {String(value)}
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
@@ -701,28 +818,18 @@ export default function StudentsPage() {
             </div>
             <div className="overflow-y-auto max-h-[60vh] p-6">
               <form id="createForm" onSubmit={handleCreateStudent} className="space-y-3">
-                {/* Name — always required */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newStudent.name || ""}
-                    onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                  />
-                </div>
-
-                {/* Dynamically derived fields — only fields this school actually uses */}
-                {createFormFields.allFields.map(({ key, label, isCustom }: any) => {
-                  const stateKey = isCustom ? key : key;
+                {/* Dynamically derived fields — only fields from this school's uploaded sheet */}
+                {createFormFields.allFields.map(({ key, label }: any) => {
                   return (
                     <div key={key}>
-                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</label>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+                        {label}{key === "name" ? " *" : ""}
+                      </label>
                       <input
                         type="text"
-                        value={newStudent[stateKey] || ""}
-                        onChange={(e) => setNewStudent({ ...newStudent, [stateKey]: e.target.value })}
+                        required={key === "name"}
+                        value={newStudent[key] || ""}
+                        onChange={(e) => setNewStudent({ ...newStudent, [key]: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                       />
                     </div>
@@ -793,109 +900,32 @@ export default function StudentsPage() {
                   </div>
                 </div>
 
-                {/* Core fields — only render if they have a value */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Full Name</label>
-                    <input
-                      type="text"
-                      value={editStudent.name || ""}
-                      onChange={(e) => setEditStudent({ ...editStudent, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                    />
-                  </div>
-                  {/* Only show these if they exist on the student */}
-                  {[
-                    { key: "class", label: "Class" },
-                    { key: "section", label: "Section" },
-                    { key: "roll_number", label: "Roll No" },
-                    { key: "admission_number", label: "Adm. No" },
-                  ]
-                    .map(({ key, label }) => (
-                      <div key={key}>
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</label>
-                        <input
-                          type="text"
-                          value={editStudent[key] || ""}
-                          onChange={(e) => setEditStudent({ ...editStudent, [key]: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                        />
-                      </div>
-                    ))}
-                </div>
-
-                {/* Additional / Custom fields */}
-                {(() => {
-                  const coreKeys = ["id", "school_id", "created_at", "name", "class", "section", "roll_number", "admission_number", "photo_url", "custom_data"];
-                  
-                  // These are the "Standard" columns we always want to show if possible
-                  const schoolSchema = [
-                    { key: "fathers_name", label: "Father's Name" },
-                    { key: "mothers_name", label: "Mother's Name" },
-                    { key: "dob", label: "Date of Birth" },
-                    { key: "phone", label: "Phone Number" },
-                    { key: "address", label: "Address" },
-                    { key: "blood_group", label: "Blood Group" },
-                    { key: "aadhar_number", label: "Aadhar Number" },
-                    { key: "house", label: "House/Team" },
-                    { key: "height", label: "Height" },
-                    { key: "weight", label: "Weight" },
-                  ];
-
-                  // Collect current values for standard schema
-                  const schemaFields = schoolSchema.map(item => ({
-                    ...item,
-                    value: editStudent[item.key] || "",
-                    isCustom: false
-                  }));
-
-                  // Collect anything else lurking in custom_data
-                  const customFields = Object.entries(editStudent.custom_data || {}).map(([key, value]) => ({
-                    key,
-                    label: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                    value: value || "",
-                    isCustom: true
-                  }));
-
-                  // Combine and filter (we show all schema fields, and all populated custom fields)
-                  const allToRender = [
-                    ...schemaFields,
-                    ...customFields.filter(cf => !schoolSchema.some(ss => ss.key === cf.key))
-                  ];
-
-                  return (
-                    <div className="pt-4 border-t border-gray-100">
-                      <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Additional Details</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        {allToRender.map((field) => (
-                          <div key={field.key} className={field.key === 'address' ? 'col-span-2' : ''}>
-                            <label className="flex items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                              {field.label}
-                              {field.isCustom && <span className="ml-1 text-[8px] px-1 bg-gray-100 rounded text-gray-400 font-normal">Custom</span>}
-                            </label>
-                            <input
-                              type="text"
-                              value={field.value as string}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (!field.isCustom) {
-                                  setEditStudent({ ...editStudent, [field.key]: val });
-                                } else {
-                                  setEditStudent({ 
-                                    ...editStudent, 
-                                    custom_data: { ...editStudent.custom_data, [field.key]: val } 
-                                  });
-                                }
-                              }}
-                              className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none transition-all placeholder:text-gray-300"
-                              placeholder={`Enter ${field.label.toLowerCase()}...`}
-                            />
-                          </div>
-                        ))}
-                      </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {dataColumns.map((field) => (
+                    <div key={field.key} className={field.key === "address" || field.key === "name" ? "col-span-2" : ""}>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+                        {field.header}{field.key === "name" ? " *" : ""}
+                      </label>
+                      <input
+                        type="text"
+                        required={field.key === "name"}
+                        value={getFieldValue(editStudent, field)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (field.is_custom) {
+                            setEditStudent({
+                              ...editStudent,
+                              custom_data: { ...editStudent.custom_data, [field.key]: val },
+                            });
+                          } else {
+                            setEditStudent({ ...editStudent, [field.key]: val });
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                      />
                     </div>
-                  );
-                })()}
+                  ))}
+                </div>
               </form>
             </div>
 
