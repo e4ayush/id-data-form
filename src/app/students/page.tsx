@@ -577,7 +577,7 @@ export default function StudentsPage() {
           </div>
 
           {/* ── Filters Row ── */}
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 mb-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 mb-5 flex flex-col xl:flex-row gap-3 items-start xl:items-center">
 
             {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
@@ -623,7 +623,7 @@ export default function StudentsPage() {
             </div>
 
             {/* Results count & Actions */}
-            <div className="ml-auto flex items-center gap-4">
+            <div className="xl:ml-auto flex flex-wrap items-center gap-3 w-full xl:w-auto">
               {selectedStudentIds.size > 0 && (
                 <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
                   <span className="text-xs font-bold text-red-600">
@@ -686,10 +686,10 @@ export default function StudentsPage() {
           ) : (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
               <div className="overflow-x-auto overflow-y-hidden custom-scrollbar">
-                <table className="w-full text-sm min-w-[900px]">
+                <table className="w-full text-sm min-w-[1120px] table-fixed">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="px-5 py-3.5 text-left w-12">
+                      <th className="px-4 py-3.5 text-left w-12">
                         <input
                           type="checkbox"
                           checked={allFilteredSelected}
@@ -698,19 +698,19 @@ export default function StudentsPage() {
                           aria-label="Select all filtered students"
                         />
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-14">Photo</th>
+                      <th className="px-4 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-20">Photo</th>
                       {dataColumns.map((field) => (
-                        <th key={field.key} className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider min-w-[140px]">
+                        <th key={field.key} className="px-4 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-40">
                           {field.header}
                         </th>
                       ))}
-                      <th className="px-5 py-3.5 text-right text-xs font-bold text-gray-400 uppercase tracking-wider w-24">Actions</th>
+                      <th className="sticky right-0 z-10 bg-gray-50 px-4 py-3.5 text-right text-xs font-bold text-gray-400 uppercase tracking-wider w-36 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {paginatedStudents.map((student) => (
                       <tr key={student.id} className={`hover:bg-gray-50/60 transition-colors group ${selectedStudentIds.has(student.id) ? "bg-indigo-50/40" : ""}`}>
-                        <td className="px-5 py-3.5">
+                        <td className="px-4 py-3.5">
                           <input
                             type="checkbox"
                             checked={selectedStudentIds.has(student.id)}
@@ -719,7 +719,7 @@ export default function StudentsPage() {
                             aria-label={`Select ${student.name}`}
                           />
                         </td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-4 py-3.5">
                           {student.photo_url ? (
                             <img
                               src={student.photo_url}
@@ -736,9 +736,12 @@ export default function StudentsPage() {
                         {dataColumns.map((field) => {
                           const value = getFieldValue(student, field);
                           return (
-                            <td key={field.key} className="px-5 py-3.5 text-gray-600 text-xs">
+                            <td key={field.key} className="px-4 py-3.5 text-gray-600 text-xs">
                               {value ? (
-                                <span className={field.key === "name" ? "font-semibold text-gray-900 text-sm" : ""}>
+                                <span
+                                  title={String(value)}
+                                  className={`block max-w-full truncate ${field.key === "name" ? "font-semibold text-gray-900 text-sm" : ""}`}
+                                >
                                   {String(value)}
                                 </span>
                               ) : (
@@ -747,8 +750,8 @@ export default function StudentsPage() {
                             </td>
                           );
                         })}
-                        <td className="px-5 py-3.5 text-right">
-                          <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <td className="sticky right-0 bg-white px-4 py-3.5 text-right shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)] group-hover:bg-gray-50/60">
+                          <div className="flex justify-end gap-1.5">
                             <button
                               onClick={() => setEditStudent({ ...student })}
                               className="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"

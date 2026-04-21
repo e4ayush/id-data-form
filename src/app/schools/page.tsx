@@ -120,7 +120,7 @@ export default function SchoolsManagementPage() {
         </div>
 
         {/* Right Column: Schools Data Table */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 min-w-0">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="text-lg font-semibold text-gray-800">Active Database</h3>
@@ -133,13 +133,13 @@ export default function SchoolsManagementPage() {
               <div className="p-8 text-center text-gray-500">Loading schools...</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm whitespace-nowrap">
+                <table className="w-full min-w-[780px] table-fixed text-left text-sm">
                   <thead className="bg-white border-b border-gray-100 text-gray-500 uppercase tracking-wider text-xs">
                     <tr>
-                      <th className="px-6 py-4 font-semibold">School Name</th>
-                      <th className="px-6 py-4 font-semibold">Login Email</th>
-                      <th className="px-6 py-4 font-semibold">Database ID</th>
-                      <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                      <th className="px-6 py-4 font-semibold w-[230px]">School Name</th>
+                      <th className="px-6 py-4 font-semibold w-[280px]">Login Email</th>
+                      <th className="px-6 py-4 font-semibold w-[160px]">Database ID</th>
+                      <th className="sticky right-0 z-10 bg-white px-6 py-4 font-semibold text-right w-[170px] shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -152,14 +152,21 @@ export default function SchoolsManagementPage() {
                     ) : (
                       schools.map((school) => (
                         <tr key={school.id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="px-6 py-4 font-bold text-gray-900">{school.name}</td>
+                          <td className="px-6 py-4 font-bold text-gray-900">
+                            <span title={school.name} className="block truncate">{school.name}</span>
+                          </td>
                           <td className="px-6 py-4 text-gray-600 font-medium">
+                            <span title={school.login_email || 'Not set'} className="block truncate">
                             {school.login_email || 'Not set'}
+                            </span>
                           </td>
-                          <td className="px-6 py-4 text-gray-400 font-mono text-xs truncate max-w-[150px]">
+                          <td className="px-6 py-4 text-gray-400 font-mono text-xs">
+                            <span title={school.id} className="block truncate">
                             {school.id}
+                            </span>
                           </td>
-                          <td className="px-6 py-4 text-right flex justify-end gap-2">
+                          <td className="sticky right-0 bg-white px-6 py-4 text-right shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">
+                            <div className="flex justify-end gap-2">
                             <button 
                               className="text-gray-600 hover:text-indigo-600 font-medium text-xs bg-gray-50 hover:bg-indigo-50 px-3 py-1.5 rounded-md transition-colors border border-gray-200 hover:border-indigo-200"
                               onClick={() => setResetData({ id: school.id, name: school.name })}
@@ -172,6 +179,7 @@ export default function SchoolsManagementPage() {
                             >
                               Delete
                             </button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -238,19 +246,19 @@ export default function SchoolsManagementPage() {
                 <p className="text-sm text-gray-500 mt-1">Please provide the new credentials to the admin.</p>
               </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mt-2">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mt-2 min-w-0">
                 <p className="text-sm text-amber-800 mb-4 font-medium flex items-center gap-2">
                   <svg className="w-5 h-5 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
                   Copy the credentials now!
                 </p>
                 <div className="space-y-3 font-mono text-sm">
-                  <div className="bg-white px-4 py-3 rounded-lg border border-amber-100 shadow-sm flex justify-between">
-                    <span className="text-gray-400 select-none uppercase text-xs tracking-wider font-sans">Email</span> 
-                    <span className="font-bold text-gray-800">{newCredentials.email}</span>
+                  <div className="bg-white px-4 py-3 rounded-lg border border-amber-100 shadow-sm grid gap-1 sm:grid-cols-[110px_minmax(0,1fr)] sm:items-center">
+                    <span className="text-gray-400 select-none uppercase text-xs tracking-wider font-sans">Email</span>
+                    <span title={newCredentials.email} className="min-w-0 break-all font-bold text-gray-800">{newCredentials.email}</span>
                   </div>
-                  <div className="bg-white px-4 py-3 rounded-lg border border-amber-100 shadow-sm flex justify-between">
-                    <span className="text-gray-400 select-none uppercase text-xs tracking-wider font-sans">New Password</span> 
-                    <span className="font-bold text-gray-800">{newCredentials.password}</span>
+                  <div className="bg-white px-4 py-3 rounded-lg border border-amber-100 shadow-sm grid gap-1 sm:grid-cols-[110px_minmax(0,1fr)] sm:items-center">
+                    <span className="text-gray-400 select-none uppercase text-xs tracking-wider font-sans">New Password</span>
+                    <span title={newCredentials.password} className="min-w-0 break-all font-bold text-gray-800">{newCredentials.password}</span>
                   </div>
                 </div>
               </div>
