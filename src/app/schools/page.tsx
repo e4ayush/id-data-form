@@ -9,7 +9,7 @@ export default function SchoolsManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  const filteredSchools = schools.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredSchools = schools.filter((s: any) => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   // Modal States
   const [deleteData, setDeleteData] = useState<{ id: string, name: string } | null>(null);
@@ -57,7 +57,7 @@ export default function SchoolsManagementPage() {
       });
       
       if (res.ok) {
-        setSchools(schools.filter(s => s.id !== deleteData.id));
+        setSchools(schools.filter((s: any) => s.id !== deleteData.id));
         const active = localStorage.getItem("bizeraActiveSchool");
         if (active && JSON.parse(active).id === deleteData.id) {
           localStorage.removeItem("bizeraActiveSchool");
@@ -126,7 +126,7 @@ export default function SchoolsManagementPage() {
                   type="text"
                   placeholder="Search schools..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e: any) => setSearchQuery(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
                 />
               </div>
@@ -153,7 +153,7 @@ export default function SchoolsManagementPage() {
                         </td>
                       </tr>
                     ) : (
-                      filteredSchools.map((school) => (
+                      filteredSchools.map((school: any) => (
                         <tr key={school.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-6 py-4 font-bold text-gray-900">
                             <span title={school.name} className="block truncate">{school.name}</span>
