@@ -22,6 +22,10 @@ export default function Home() {
   const [uploadMessage, setUploadMessage] = useState({ text: "", type: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Validation Errors Modal State
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
+
   useEffect(() => {
     const savedSchool = localStorage.getItem("bizeraActiveSchool");
     if (savedSchool) {
@@ -125,7 +129,13 @@ export default function Home() {
         setFile(null); 
         if (fileInputRef.current) fileInputRef.current.value = "";
       } else {
-        setUploadMessage({ text: result.detail || "Upload failed.", type: "error" });
+        if (result.detail && typeof result.detail === 'object' && Array.isArray(result.detail.errors)) {
+          setValidationErrors(result.detail.errors);
+          setIsValidationModalOpen(true);
+          setUploadMessage({ text: "Upload failed due to data validation errors.", type: "error" });
+        } else {
+          setUploadMessage({ text: typeof result.detail === "string" ? result.detail : "Upload failed.", type: "error" });
+        }
       }
     } catch (error) {
       setUploadMessage({ text: "Upload failed. Check console.", type: "error" });
@@ -371,6 +381,39 @@ export default function Home() {
             </button>
           </div>
         )}
+      </Modal>
+
+      {/* Modal for Validation Errors */}
+      <Modal 
+        isOpen={isValidationModalOpen} 
+        onClose={() => setIsValidationModalOpen(false)} 
+        title="Validation Errors"
+        maxWidth="2xl"
+      >
+        <div className="py-2">
+          <div className="flex items-center gap-3 mb-4 text-amber-700 bg-amber-50 p-4 rounded-xl border border-amber-200">
+            <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <p className="text-sm font-medium">Please fix the following issues in your Excel sheet before uploading again.</p>
+          </div>
+          
+          <div className="max-h-[50vh] overflow-y-auto pr-2 space-y-2">
+            {validationErrors.map((error, idx) => (
+              <div key={idx} className="bg-white px-4 py-3 rounded-lg border border-red-100 shadow-sm text-sm text-red-800 flex items-start gap-3">
+                 <span className="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">{idx + 1}</span>
+                 <span>{error}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+            <button 
+              onClick={() => setIsValidationModalOpen(false)}
+              className="px-6 py-2.5 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
