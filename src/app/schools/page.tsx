@@ -11,6 +11,7 @@ export default function SchoolsManagementPage() {
   // Modal States
   const [deleteData, setDeleteData] = useState<{ id: string, name: string } | null>(null);
   const [resetData, setResetData] = useState<{ id: string, name: string } | null>(null);
+  const [viewPassData, setViewPassData] = useState<{ id: string, name: string } | null>(null);
   const [newCredentials, setNewCredentials] = useState<{ email: string, password: string } | null>(null);
   
   // Processing States
@@ -103,25 +104,9 @@ export default function SchoolsManagementPage() {
         <p className="text-gray-500 mt-1">Super Admin Panel: Register branches, view system data, and manage access.</p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Column: Stats instead of duplicate form */}
-        <div className="lg:col-span-1">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 sticky top-8 space-y-4">
-            <h3 className="text-lg font-semibold text-gray-800">Overview</h3>
-            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-center">
-              <div className="text-4xl font-black text-indigo-600">{schools.length}</div>
-              <div className="text-sm text-indigo-500 font-medium mt-1">Registered Schools</div>
-            </div>
-            <p className="text-xs text-gray-400 leading-relaxed">
-              To register a new school, go to <span className="font-semibold text-gray-600">Data Injection</span> page. Credentials are shown only once at creation time.
-            </p>
-          </div>
-        </div>
-
-        {/* Right Column: Schools Data Table */}
-        <div className="lg:col-span-2 min-w-0">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="w-full">
+        {/* Schools Data Table */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="text-lg font-semibold text-gray-800">Active Database</h3>
               <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">
@@ -139,7 +124,7 @@ export default function SchoolsManagementPage() {
                       <th className="px-6 py-4 font-semibold w-[230px]">School Name</th>
                       <th className="px-6 py-4 font-semibold w-[280px]">Login Email</th>
                       <th className="px-6 py-4 font-semibold w-[160px]">Database ID</th>
-                      <th className="sticky right-0 z-10 bg-white px-6 py-4 font-semibold text-right w-[170px] shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">Actions</th>
+                      <th className="sticky right-0 z-10 bg-white px-6 py-4 font-semibold text-right w-[240px] shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -169,6 +154,12 @@ export default function SchoolsManagementPage() {
                             <div className="flex justify-end gap-2">
                             <button 
                               className="text-gray-600 hover:text-indigo-600 font-medium text-xs bg-gray-50 hover:bg-indigo-50 px-3 py-1.5 rounded-md transition-colors border border-gray-200 hover:border-indigo-200"
+                              onClick={() => setViewPassData({ id: school.id, name: school.name })}
+                            >
+                              View Pass
+                            </button>
+                            <button 
+                              className="text-gray-600 hover:text-indigo-600 font-medium text-xs bg-gray-50 hover:bg-indigo-50 px-3 py-1.5 rounded-md transition-colors border border-gray-200 hover:border-indigo-200"
                               onClick={() => setResetData({ id: school.id, name: school.name })}
                             >
                               Reset Pass
@@ -190,8 +181,6 @@ export default function SchoolsManagementPage() {
             )}
           </div>
         </div>
-
-      </div>
       {/* Modals placed globally below layout */}
 
       {/* Delete Confirmation Modal */}
@@ -271,6 +260,32 @@ export default function SchoolsManagementPage() {
               </button>
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* View Password Modal */}
+      <Modal 
+        isOpen={viewPassData !== null} 
+        onClose={() => setViewPassData(null)} 
+        title="View School Password"
+      >
+        <div className="py-2">
+          <p className="text-gray-600 mb-6">
+            Passwords are encrypted using advanced hashing by Supabase Auth and <strong className="text-gray-900">cannot be retrieved or viewed</strong> in plain text.
+            <br /><br />
+            If the school administrator has forgotten their password, you must reset it to generate a new secure password.
+          </p>
+          <div className="flex gap-3">
+            <button onClick={() => setViewPassData(null)} className="flex-1 py-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+              Cancel
+            </button>
+            <button onClick={() => {
+              setResetData(viewPassData);
+              setViewPassData(null);
+            }} className="flex-1 py-2.5 bg-indigo-600 rounded-xl font-medium text-white hover:bg-indigo-700 transition-colors">
+              Go to Reset Password
+            </button>
+          </div>
         </div>
       </Modal>
     </div>
