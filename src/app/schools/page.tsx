@@ -6,12 +6,14 @@ import { Modal } from "@/components/Modal";
 
 export default function SchoolsManagementPage() {
   const [schools, setSchools] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+
+  const filteredSchools = schools.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   // Modal States
   const [deleteData, setDeleteData] = useState<{ id: string, name: string } | null>(null);
   const [resetData, setResetData] = useState<{ id: string, name: string } | null>(null);
-  const [viewPassData, setViewPassData] = useState<{ id: string, name: string } | null>(null);
   const [newCredentials, setNewCredentials] = useState<{ email: string, password: string } | null>(null);
   
   // Processing States
@@ -107,11 +109,27 @@ export default function SchoolsManagementPage() {
       <div className="w-full">
         {/* Schools Data Table */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h3 className="text-lg font-semibold text-gray-800">Active Database</h3>
-              <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">
-                {schools.length} Schools Total
-              </span>
+            <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold text-gray-800">Active Database</h3>
+                <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">
+                  {filteredSchools.length} Schools Total
+                </span>
+              </div>
+              <div className="relative w-full sm:max-w-xs">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search schools..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
+                />
+              </div>
             </div>
 
             {isLoading ? (
@@ -124,18 +142,18 @@ export default function SchoolsManagementPage() {
                       <th className="px-6 py-4 font-semibold w-[230px]">School Name</th>
                       <th className="px-6 py-4 font-semibold w-[280px]">Login Email</th>
                       <th className="px-6 py-4 font-semibold w-[160px]">Database ID</th>
-                      <th className="sticky right-0 z-10 bg-white px-6 py-4 font-semibold text-right w-[240px] shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">Actions</th>
+                      <th className="sticky right-0 z-10 bg-white px-6 py-4 font-semibold text-right w-[170px] shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {schools.length === 0 ? (
+                    {filteredSchools.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-6 py-12 text-center text-gray-400">
-                          No schools registered yet.
+                          {searchQuery ? "No schools found matching your search." : "No schools registered yet."}
                         </td>
                       </tr>
                     ) : (
-                      schools.map((school) => (
+                      filteredSchools.map((school) => (
                         <tr key={school.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-6 py-4 font-bold text-gray-900">
                             <span title={school.name} className="block truncate">{school.name}</span>
@@ -152,12 +170,6 @@ export default function SchoolsManagementPage() {
                           </td>
                           <td className="sticky right-0 bg-white px-6 py-4 text-right shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">
                             <div className="flex justify-end gap-2">
-                            <button 
-                              className="text-gray-600 hover:text-indigo-600 font-medium text-xs bg-gray-50 hover:bg-indigo-50 px-3 py-1.5 rounded-md transition-colors border border-gray-200 hover:border-indigo-200"
-                              onClick={() => setViewPassData({ id: school.id, name: school.name })}
-                            >
-                              View Pass
-                            </button>
                             <button 
                               className="text-gray-600 hover:text-indigo-600 font-medium text-xs bg-gray-50 hover:bg-indigo-50 px-3 py-1.5 rounded-md transition-colors border border-gray-200 hover:border-indigo-200"
                               onClick={() => setResetData({ id: school.id, name: school.name })}
@@ -263,31 +275,7 @@ export default function SchoolsManagementPage() {
         </div>
       </Modal>
 
-      {/* View Password Modal */}
-      <Modal 
-        isOpen={viewPassData !== null} 
-        onClose={() => setViewPassData(null)} 
-        title="View School Password"
-      >
-        <div className="py-2">
-          <p className="text-gray-600 mb-6">
-            Passwords are encrypted using advanced hashing by Supabase Auth and <strong className="text-gray-900">cannot be retrieved or viewed</strong> in plain text.
-            <br /><br />
-            If the school administrator has forgotten their password, you must reset it to generate a new secure password.
-          </p>
-          <div className="flex gap-3">
-            <button onClick={() => setViewPassData(null)} className="flex-1 py-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-100 transition-colors">
-              Cancel
-            </button>
-            <button onClick={() => {
-              setResetData(viewPassData);
-              setViewPassData(null);
-            }} className="flex-1 py-2.5 bg-indigo-600 rounded-xl font-medium text-white hover:bg-indigo-700 transition-colors">
-              Go to Reset Password
-            </button>
-          </div>
-        </div>
-      </Modal>
+
     </div>
   );
 }
