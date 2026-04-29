@@ -18,6 +18,7 @@ const FALLBACK_SCHEMA = [
   { header: "Section", key: "section", is_custom: false, is_photo: false },
   { header: "Roll Number", key: "roll_number", is_custom: false, is_photo: false },
   { header: "Admission Number", key: "admission_number", is_custom: false, is_photo: false },
+  { header: "Address", key: "address", is_custom: false, is_photo: false },
 ];
 
 type ColumnSchema = {
@@ -58,6 +59,7 @@ export default function StudentsPage() {
   const [matchColumn, setMatchColumn] = useState<string>("admission_number");
   const [isUploadingBulk, setIsUploadingBulk] = useState(false);
   const [bulkUploadResult, setBulkUploadResult] = useState<any>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -292,6 +294,9 @@ export default function StudentsPage() {
     setBulkUploadResult(null);
     setErrorMsg(null);
     
+    const controller = new AbortController();
+    setAbortController(controller);
+    
     try {
       const formData = new FormData();
       formData.append("match_column", matchColumn);
@@ -303,6 +308,7 @@ export default function StudentsPage() {
         method: "POST",
         headers: { "X-Admin-Secret": ADMIN_SECRET },
         body: formData,
+        signal: controller.signal,
       });
 
       const result = await res.json();
@@ -313,9 +319,14 @@ export default function StudentsPage() {
       setBulkUploadResult(result);
       fetchStudents(activeSchool.id);
     } catch (error: any) {
-      setErrorMsg(error.message || "Upload failed. Please try again.");
+      if (error.name === 'AbortError') {
+        setErrorMsg("Upload cancelled by user.");
+      } else {
+        setErrorMsg(error.message || "Upload failed. Please try again.");
+      }
     } finally {
       setIsUploadingBulk(false);
+      setAbortController(null);
     }
   };
 
@@ -1003,6 +1014,7 @@ export default function StudentsPage() {
                       <option value="roll_number">Roll Number</option>
                       <option value="aadhar_number">Aadhar Number</option>
                       <option value="name">Exact Name</option>
+                      <option value="_original_photo_filename">Photo Column (from CSV)</option>
                       {createFormFields.rawCustomKeys.map((k) => (
                         <option key={k} value={k}>Custom Field: {k}</option>
                       ))}
@@ -1071,7 +1083,19 @@ export default function StudentsPage() {
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 bg-gray-50/50 rounded-b-2xl">
               {!bulkUploadResult ? (
                 <>
-                  <button onClick={() => { setShowBulkUpload(false); setBulkPhotos(null); }} className="flex-1 px-4 py-2.5 text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-medium text-sm transition-colors" disabled={isUploadingBulk}>Cancel</button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      if (isUploadingBulk && abortController) {
+                        abortController.abort();
+                      }
+                      setShowBulkUpload(false); 
+                      setBulkPhotos(null); 
+                    }} 
+                    className="flex-1 px-4 py-2.5 text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-medium text-sm transition-colors"
+                  >
+                    {isUploadingBulk ? "Cancel Upload" : "Cancel"}
+                  </button>
                   <button 
                     form="bulkUploadForm" 
                     type="submit" 
