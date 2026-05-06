@@ -514,6 +514,24 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {/* ── Status Banner ── */}
+      {(isDownloadingPhotos || isUploadingBulk) && (
+        <div className="mb-6 flex items-center gap-4 bg-indigo-50 border border-indigo-200 px-5 py-4 rounded-2xl shadow-sm overflow-hidden relative">
+          <div className="absolute bottom-0 left-0 h-1 bg-indigo-600 animate-pulse w-full"></div>
+          <svg className="w-6 h-6 text-indigo-500 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-indigo-900 mb-0.5">
+              {isDownloadingPhotos ? "Packaging your photos..." : "Uploading and matching photos..."}
+            </p>
+            <p className="text-xs font-medium text-indigo-600/80">
+              {isDownloadingPhotos ? "We are zipping the files securely. This may take a moment." : "We are compressing and assigning images to students. Please don't close the window."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Top Bar ── */}
       <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-8">
         <div>
@@ -1044,6 +1062,16 @@ export default function StudentsPage() {
                       </p>
                     )}
                   </div>
+
+                  {isUploadingBulk && (
+                    <div className="mt-6 p-5 bg-indigo-50/80 rounded-xl border border-indigo-100 text-center relative overflow-hidden">
+                      <div className="h-1.5 w-full bg-indigo-200/50 rounded-full overflow-hidden mb-3">
+                        <div className="h-full bg-indigo-600 rounded-full animate-pulse w-full"></div>
+                      </div>
+                      <p className="text-xs font-bold text-indigo-800">Uploading and matching your photos...</p>
+                      <p className="text-[10px] font-medium text-indigo-500/80 mt-1">Please keep this window open.</p>
+                    </div>
+                  )}
                 </form>
               ) : (
                 <div className="text-center py-4">
