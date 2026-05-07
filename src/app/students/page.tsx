@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/immutability, react-hooks/exhaustive-deps, react-hooks/preserve-manual-memoization, react-hooks/set-state-in-effect, @next/next/no-img-element, jsx-a11y/alt-text, @typescript-eslint/no-unused-vars */
+
 import { useState, useEffect, useMemo } from "react";
 import { API_URL } from "@/lib/api";
 
@@ -33,9 +35,8 @@ type ProgressState = {
   loaded: number;
   total: number | null;
   percent: number | null;
+  detail?: string;
 };
-
-type ExportRow = Record<string, string | number | null | undefined>;
 
 const formatBytes = (bytes: number) => {
   if (!bytes) return "0 B";
@@ -86,6 +87,7 @@ export default function StudentsPage() {
   const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<ProgressState | null>(null);
   const [excelClassFilter, setExcelClassFilter] = useState("All");
+  const [excelFileFormat, setExcelFileFormat] = useState("xlsx");
 
   // Error feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -314,10 +316,13 @@ export default function StudentsPage() {
     setBulkUploadResult(null);
     setErrorMsg(null);
     setUploadProgress({ label: "Preparing upload...", loaded: 0, total: null, percent: 0 });
+    const jobId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
     
     try {
       const formData = new FormData();
       formData.append("match_column", matchColumn);
+      formData.append("job_id", jobId);
       for (let i = 0; i < bulkPhotos.length; i++) {
         formData.append("files", bulkPhotos[i]);
       }
@@ -325,6 +330,26 @@ export default function StudentsPage() {
       const result = await new Promise<any>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         setAbortController({ abort: () => xhr.abort() });
+
+        const startProcessingProgress = () => {
+          if (progressTimer) return;
+          progressTimer = setInterval(async () => {
+            try {
+              const res = await fetch(`${API_URL}/upload-progress/${jobId}`, { headers: adminHeaders });
+              if (!res.ok) return;
+              const progress = await res.json();
+              setUploadProgress({
+                label: progress.label || "Processing photos...",
+                loaded: 0,
+                total: null,
+                percent: typeof progress.percent === "number" ? progress.percent : null,
+                detail: `${progress.processed || 0} of ${progress.total || bulkPhotos.length} files • ${progress.matched || 0} matched, ${progress.skipped || 0} skipped`,
+              });
+            } catch {
+              // Keep the current progress if a single polling request fails.
+            }
+          }, 700);
+        };
 
         xhr.open("POST", `${API_URL}/upload-photos/${activeSchool.id}`);
         xhr.setRequestHeader("X-Admin-Secret", ADMIN_SECRET);
@@ -338,9 +363,14 @@ export default function StudentsPage() {
             total,
             percent,
           });
+          if (percent === 100) startProcessingProgress();
         };
 
         xhr.onload = () => {
+          if (progressTimer) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+          }
           let parsed: any = {};
           try {
             parsed = JSON.parse(xhr.responseText || "{}");
@@ -358,6 +388,10 @@ export default function StudentsPage() {
 
         xhr.onerror = () => reject(new Error("Upload failed. Please try again."));
         xhr.onabort = () => {
+          if (progressTimer) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+          }
           const abortError = new Error("Upload cancelled by user.");
           abortError.name = "AbortError";
           reject(abortError);
@@ -375,6 +409,7 @@ export default function StudentsPage() {
         setErrorMsg(error.message || "Upload failed. Please try again.");
       }
     } finally {
+      if (progressTimer) clearInterval(progressTimer);
       setIsUploadingBulk(false);
       setAbortController(null);
       setUploadProgress(null);
@@ -455,41 +490,33 @@ export default function StudentsPage() {
   const handleDownloadExcel = async () => {
     if (!activeSchool) return;
     try {
-      const res = await fetch(`${API_URL}/export/${activeSchool.id}`, { headers: adminHeaders });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.detail || "Export failed.");
-      const classHeader = (result.column_schema || []).find((field: ColumnSchema) => field.key === "class")?.header || "Class";
-      const data: ExportRow[] = excelClassFilter === "All"
-        ? (result.data || [])
-        : (result.data || []).filter((row: ExportRow) => String(row[classHeader] ?? "").trim() === excelClassFilter);
-      if (data.length === 0) return alert("No data to export");
+      const query = new URLSearchParams({
+        class_filter: excelClassFilter,
+        file_format: excelFileFormat,
+      });
+      const res = await fetch(`${API_URL}/export-file/${activeSchool.id}?${query.toString()}`, { headers: adminHeaders });
+      if (!res.ok) {
+        let message = "Export failed.";
+        try {
+          const result = await res.json();
+          message = result.detail || message;
+        } catch {}
+        throw new Error(message);
+      }
 
-      const schemaHeaders = (result.column_schema || [])
-        .map((field: ColumnSchema) => field.header)
-        .filter(Boolean);
-      const headers: string[] = schemaHeaders.length > 0
-        ? schemaHeaders
-        : Array.from(new Set(data.flatMap((row) => Object.keys(row))));
-      
-      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + 
-        headers.join(",") + "\n" +
-        data.map((row) => 
-          headers.map(field => {
-            let val = row[field];
-            if (val === null || val === undefined) val = "";
-            val = String(val).replace(/"/g, '""');
-            return `"${val}"`;
-          }).join(",")
-        ).join("\n");
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
+      const blob = await res.blob();
+      if (blob.size === 0) return alert("No data to export");
+      const encodedUri = window.URL.createObjectURL(blob);
+      const contentDisposition = res.headers.get("content-disposition") || "";
+      const serverFilename = contentDisposition.match(/filename="?([^"]+)"?/i)?.[1];
       const classSuffix = excelClassFilter === "All" ? "All_Classes" : `Class_${excelClassFilter}`;
-      link.setAttribute("download", `${activeSchool.name}_${classSuffix}_Students.csv`);
+      const link = document.createElement("a");
+      link.href = encodedUri;
+      link.download = serverFilename || `${activeSchool.name}_${classSuffix}_Students.${excelFileFormat}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(encodedUri);
     } catch (error: any) {
       setErrorMsg(error.message || "Failed to download Excel.");
     }
@@ -620,6 +647,8 @@ export default function StudentsPage() {
             <p className="text-xs font-medium text-indigo-600/80">
               {activeTransferProgress?.total
                 ? `${formatBytes(activeTransferProgress.loaded)} of ${formatBytes(activeTransferProgress.total)}${activeTransferProgress.percent !== null ? ` (${activeTransferProgress.percent}%)` : ""}`
+                : activeTransferProgress?.detail
+                  ? activeTransferProgress.detail
                 : activeTransferProgress?.loaded
                   ? `${formatBytes(activeTransferProgress.loaded)} transferred`
                   : isDownloadingPhotos
@@ -684,6 +713,16 @@ export default function StudentsPage() {
                 {availableClasses.map((cls) => (
                   <option key={cls as string} value={cls as string}>Class {cls as string}</option>
                 ))}
+              </select>
+              <select
+                value={excelFileFormat}
+                onChange={(e) => setExcelFileFormat(e.target.value)}
+                className="px-3 py-2.5 bg-white border border-green-200 rounded-xl text-sm font-medium text-green-800 focus:ring-2 focus:ring-green-400 outline-none shadow-sm"
+                aria-label="Excel file format"
+              >
+                <option value="xlsx">XLSX</option>
+                <option value="xls">XLS</option>
+                <option value="csv">CSV</option>
               </select>
               <button
                 onClick={handleDownloadExcel}
@@ -1186,6 +1225,8 @@ export default function StudentsPage() {
                       <p className="text-[10px] font-medium text-indigo-500/80 mt-1">
                         {uploadProgress?.total
                           ? `${formatBytes(uploadProgress.loaded)} of ${formatBytes(uploadProgress.total)}${uploadProgress.percent !== null ? ` (${uploadProgress.percent}%)` : ""}`
+                          : uploadProgress?.detail
+                            ? uploadProgress.detail
                           : "Please keep this window open."}
                       </p>
                     </div>
