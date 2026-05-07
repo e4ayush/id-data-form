@@ -28,6 +28,22 @@ type ColumnSchema = {
   is_photo?: boolean;
 };
 
+type ProgressState = {
+  label: string;
+  loaded: number;
+  total: number | null;
+  percent: number | null;
+};
+
+type ExportRow = Record<string, string | number | null | undefined>;
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+};
+
 export default function StudentsPage() {
   const [schools, setSchools] = useState<any[]>([]);
   const [activeSchool, setActiveSchool] = useState<any | null>(null);
@@ -59,7 +75,8 @@ export default function StudentsPage() {
   const [matchColumn, setMatchColumn] = useState<string>("admission_number");
   const [isUploadingBulk, setIsUploadingBulk] = useState(false);
   const [bulkUploadResult, setBulkUploadResult] = useState<any>(null);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [abortController, setAbortController] = useState<{ abort: () => void } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<ProgressState | null>(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -67,6 +84,8 @@ export default function StudentsPage() {
 
   // Download states
   const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<ProgressState | null>(null);
+  const [excelClassFilter, setExcelClassFilter] = useState("All");
 
   // Error feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -104,6 +123,7 @@ export default function StudentsPage() {
       setStudents(result.data || []);
       setColumnSchema(result.column_schema || []);
       setSelectedClass("All");
+      setExcelClassFilter("All");
       setSearchQuery("");
       setSelectedStudentIds(new Set());
       setLastRefreshed(new Date());
@@ -293,9 +313,7 @@ export default function StudentsPage() {
     setIsUploadingBulk(true);
     setBulkUploadResult(null);
     setErrorMsg(null);
-    
-    const controller = new AbortController();
-    setAbortController(controller);
+    setUploadProgress({ label: "Preparing upload...", loaded: 0, total: null, percent: 0 });
     
     try {
       const formData = new FormData();
@@ -304,17 +322,49 @@ export default function StudentsPage() {
         formData.append("files", bulkPhotos[i]);
       }
 
-      const res = await fetch(`${API_URL}/upload-photos/${activeSchool.id}`, {
-        method: "POST",
-        headers: { "X-Admin-Secret": ADMIN_SECRET },
-        body: formData,
-        signal: controller.signal,
-      });
+      const result = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        setAbortController({ abort: () => xhr.abort() });
 
-      const result = await res.json();
-      if (!res.ok) {
-        throw new Error(result.detail || "Bulk upload failed.");
-      }
+        xhr.open("POST", `${API_URL}/upload-photos/${activeSchool.id}`);
+        xhr.setRequestHeader("X-Admin-Secret", ADMIN_SECRET);
+
+        xhr.upload.onprogress = (event) => {
+          const total = event.lengthComputable ? event.total : null;
+          const percent = total ? Math.round((event.loaded / total) * 100) : null;
+          setUploadProgress({
+            label: percent === 100 ? "Processing photos..." : "Uploading photos...",
+            loaded: event.loaded,
+            total,
+            percent,
+          });
+        };
+
+        xhr.onload = () => {
+          let parsed: any = {};
+          try {
+            parsed = JSON.parse(xhr.responseText || "{}");
+          } catch {
+            parsed = {};
+          }
+
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setUploadProgress((current) => current ? { ...current, label: "Upload complete", percent: 100 } : current);
+            resolve(parsed);
+          } else {
+            reject(new Error(parsed.detail || "Bulk upload failed."));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error("Upload failed. Please try again."));
+        xhr.onabort = () => {
+          const abortError = new Error("Upload cancelled by user.");
+          abortError.name = "AbortError";
+          reject(abortError);
+        };
+
+        xhr.send(formData);
+      });
       
       setBulkUploadResult(result);
       fetchStudents(activeSchool.id);
@@ -327,6 +377,7 @@ export default function StudentsPage() {
     } finally {
       setIsUploadingBulk(false);
       setAbortController(null);
+      setUploadProgress(null);
     }
   };
 
@@ -407,7 +458,10 @@ export default function StudentsPage() {
       const res = await fetch(`${API_URL}/export/${activeSchool.id}`, { headers: adminHeaders });
       const result = await res.json();
       if (!res.ok) throw new Error(result.detail || "Export failed.");
-      const data = result.data || [];
+      const classHeader = (result.column_schema || []).find((field: ColumnSchema) => field.key === "class")?.header || "Class";
+      const data: ExportRow[] = excelClassFilter === "All"
+        ? (result.data || [])
+        : (result.data || []).filter((row: ExportRow) => String(row[classHeader] ?? "").trim() === excelClassFilter);
       if (data.length === 0) return alert("No data to export");
 
       const schemaHeaders = (result.column_schema || [])
@@ -415,11 +469,11 @@ export default function StudentsPage() {
         .filter(Boolean);
       const headers: string[] = schemaHeaders.length > 0
         ? schemaHeaders
-        : Array.from(new Set(data.flatMap((row: any) => Object.keys(row))));
+        : Array.from(new Set(data.flatMap((row) => Object.keys(row))));
       
       const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + 
         headers.join(",") + "\n" +
-        data.map((row: any) => 
+        data.map((row) => 
           headers.map(field => {
             let val = row[field];
             if (val === null || val === undefined) val = "";
@@ -431,7 +485,8 @@ export default function StudentsPage() {
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `${activeSchool.name}_Students.csv`);
+      const classSuffix = excelClassFilter === "All" ? "All_Classes" : `Class_${excelClassFilter}`;
+      link.setAttribute("download", `${activeSchool.name}_${classSuffix}_Students.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -443,6 +498,7 @@ export default function StudentsPage() {
   const handleDownloadPhotos = async () => {
     if (!activeSchool) return;
     setIsDownloadingPhotos(true);
+    setDownloadProgress({ label: "Preparing photo archive...", loaded: 0, total: null, percent: 0 });
     try {
       const filenameColumns = usableSchema;
       const filenameChoices = filenameColumns
@@ -462,9 +518,38 @@ export default function StudentsPage() {
         : "";
       const res = await fetch(`${API_URL}/download-photos/${activeSchool.id}${query}`, { headers: adminHeaders });
       if (!res.ok) throw new Error("Failed to download photos archive");
-      
-      const blob = await res.blob();
+
+      const contentLength = Number(res.headers.get("content-length") || 0);
+      const total = contentLength > 0 ? contentLength : null;
+      let blob: Blob;
+
+      if (res.body) {
+        const reader = res.body.getReader();
+        const chunks: ArrayBuffer[] = [];
+        let loaded = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer);
+            loaded += value.length;
+            setDownloadProgress({
+              label: "Downloading photo archive...",
+              loaded,
+              total,
+              percent: total ? Math.min(99, Math.round((loaded / total) * 100)) : null,
+            });
+          }
+        }
+
+        blob = new Blob(chunks, { type: "application/zip" });
+      } else {
+        blob = await res.blob();
+      }
+
       if (blob.size === 0) throw new Error("No photos available for this school");
+      setDownloadProgress({ label: "Download complete", loaded: blob.size, total: blob.size, percent: 100 });
 
       const encodedUri = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -478,6 +563,7 @@ export default function StudentsPage() {
       setErrorMsg(error.message || "Failed to download Photos.");
     } finally {
       setIsDownloadingPhotos(false);
+      setDownloadProgress(null);
     }
   };
 
@@ -489,6 +575,7 @@ export default function StudentsPage() {
   }, [students, availableClasses]);
 
   const withPhotos = students.filter((s) => s.photo_url).length;
+  const activeTransferProgress = isDownloadingPhotos ? downloadProgress : uploadProgress;
 
   if (isLoading)
     return (
@@ -517,16 +604,27 @@ export default function StudentsPage() {
       {/* ── Status Banner ── */}
       {(isDownloadingPhotos || isUploadingBulk) && (
         <div className="mb-6 flex items-center gap-4 bg-indigo-50 border border-indigo-200 px-5 py-4 rounded-2xl shadow-sm overflow-hidden relative">
-          <div className="absolute bottom-0 left-0 h-1 bg-indigo-600 animate-pulse w-full"></div>
+          <div className="absolute bottom-0 left-0 h-1 bg-indigo-100 w-full">
+            <div
+              className={`h-full bg-indigo-600 transition-all duration-300 ${activeTransferProgress?.percent === null ? "animate-pulse w-full" : ""}`}
+              style={activeTransferProgress?.percent !== null ? { width: `${activeTransferProgress?.percent ?? 0}%` } : undefined}
+            />
+          </div>
           <svg className="w-6 h-6 text-indigo-500 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           <div className="flex-1">
             <p className="text-sm font-bold text-indigo-900 mb-0.5">
-              {isDownloadingPhotos ? "Packaging your photos..." : "Uploading and matching photos..."}
+              {activeTransferProgress?.label || (isDownloadingPhotos ? "Packaging your photos..." : "Uploading and matching photos...")}
             </p>
             <p className="text-xs font-medium text-indigo-600/80">
-              {isDownloadingPhotos ? "We are zipping the files securely. This may take a moment." : "We are compressing and assigning images to students. Please don't close the window."}
+              {activeTransferProgress?.total
+                ? `${formatBytes(activeTransferProgress.loaded)} of ${formatBytes(activeTransferProgress.total)}${activeTransferProgress.percent !== null ? ` (${activeTransferProgress.percent}%)` : ""}`
+                : activeTransferProgress?.loaded
+                  ? `${formatBytes(activeTransferProgress.loaded)} transferred`
+                  : isDownloadingPhotos
+                    ? "We are zipping the files securely. This may take a moment."
+                    : "We are compressing and assigning images to students. Please don't close the window."}
             </p>
           </div>
         </div>
@@ -575,15 +673,28 @@ export default function StudentsPage() {
             ))}
           </select>
           {activeSchool && (
-            <button
-              onClick={handleDownloadExcel}
-              className="px-4 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Download Excel
-            </button>
+            <div className="flex items-center gap-2">
+              <select
+                value={excelClassFilter}
+                onChange={(e) => setExcelClassFilter(e.target.value)}
+                className="px-3 py-2.5 bg-white border border-green-200 rounded-xl text-sm font-medium text-green-800 focus:ring-2 focus:ring-green-400 outline-none shadow-sm max-w-[150px]"
+                aria-label="Class to download in Excel"
+              >
+                <option value="All">All Classes</option>
+                {availableClasses.map((cls) => (
+                  <option key={cls as string} value={cls as string}>Class {cls as string}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleDownloadExcel}
+                className="px-4 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Excel
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -1037,7 +1148,7 @@ export default function StudentsPage() {
                         <option key={k} value={k}>Custom Field: {k}</option>
                       ))}
                     </select>
-                    <p className="text-xs text-gray-500 mt-1.5">If you select Admission Number, the file "1024.jpg" will be assigned to the student with Admission No 1024.</p>
+                    <p className="text-xs text-gray-500 mt-1.5">If you select Admission Number, the file &quot;1024.jpg&quot; will be assigned to the student with Admission No 1024.</p>
                   </div>
 
                   <div>
@@ -1045,7 +1156,7 @@ export default function StudentsPage() {
                     <div className="relative group">
                       <input
                         type="file"
-                        // @ts-ignore: webkitdirectory is non-standard but works in all modern browsers
+                        // @ts-expect-error: webkitdirectory is non-standard but works in all modern browsers
                         webkitdirectory="" 
                         directory=""
                         multiple
@@ -1066,10 +1177,17 @@ export default function StudentsPage() {
                   {isUploadingBulk && (
                     <div className="mt-6 p-5 bg-indigo-50/80 rounded-xl border border-indigo-100 text-center relative overflow-hidden">
                       <div className="h-1.5 w-full bg-indigo-200/50 rounded-full overflow-hidden mb-3">
-                        <div className="h-full bg-indigo-600 rounded-full animate-pulse w-full"></div>
+                        <div
+                          className={`h-full bg-indigo-600 rounded-full transition-all duration-300 ${uploadProgress?.percent === null ? "animate-pulse w-full" : ""}`}
+                          style={uploadProgress?.percent !== null ? { width: `${uploadProgress?.percent ?? 0}%` } : undefined}
+                        ></div>
                       </div>
-                      <p className="text-xs font-bold text-indigo-800">Uploading and matching your photos...</p>
-                      <p className="text-[10px] font-medium text-indigo-500/80 mt-1">Please keep this window open.</p>
+                      <p className="text-xs font-bold text-indigo-800">{uploadProgress?.label || "Uploading and matching your photos..."}</p>
+                      <p className="text-[10px] font-medium text-indigo-500/80 mt-1">
+                        {uploadProgress?.total
+                          ? `${formatBytes(uploadProgress.loaded)} of ${formatBytes(uploadProgress.total)}${uploadProgress.percent !== null ? ` (${uploadProgress.percent}%)` : ""}`
+                          : "Please keep this window open."}
+                      </p>
                     </div>
                   )}
                 </form>
