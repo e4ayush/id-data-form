@@ -86,6 +86,8 @@ export default function StudentsPage() {
   // Download states
   const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<ProgressState | null>(null);
+  const [showPhotoDownload, setShowPhotoDownload] = useState(false);
+  const [photoFilenameColumn, setPhotoFilenameColumn] = useState("phone");
   const [excelClassFilter, setExcelClassFilter] = useState("All");
   const [excelFileFormat, setExcelFileFormat] = useState("xlsx");
 
@@ -434,6 +436,18 @@ export default function StudentsPage() {
     [usableSchema]
   );
 
+  const defaultPhotoFilenameColumn = useMemo(
+    () =>
+      usableSchema.find((field) => field.key === "phone")?.key ||
+      usableSchema.find((field) => field.key === "photo")?.key ||
+      usableSchema.find((field) => field.key === "admission_number")?.key ||
+      usableSchema.find((field) => field.key === "roll_number")?.key ||
+      usableSchema.find((field) => field.key === "name")?.key ||
+      usableSchema[0]?.key ||
+      "",
+    [usableSchema]
+  );
+
   const getFieldValue = (student: any, field: ColumnSchema) => {
     if (field.is_custom) {
       return student.custom_data?.[field.key] ?? "";
@@ -522,24 +536,18 @@ export default function StudentsPage() {
     }
   };
 
-  const handleDownloadPhotos = async () => {
+  const openPhotoDownloadModal = () => {
+    setPhotoFilenameColumn((current) =>
+      usableSchema.some((field) => field.key === current) ? current : defaultPhotoFilenameColumn
+    );
+    setShowPhotoDownload(true);
+  };
+
+  const handleDownloadPhotos = async (selectedColumn: string) => {
     if (!activeSchool) return;
     setIsDownloadingPhotos(true);
     setDownloadProgress({ label: "Preparing photo archive...", loaded: 0, total: null, percent: 0 });
     try {
-      const filenameColumns = usableSchema;
-      const filenameChoices = filenameColumns
-        .map((field) => `${field.header} (${field.key})`)
-        .join("\n");
-      const selectedColumn = window.prompt(
-        `Which column should be used to name the photo files?\n\n${filenameChoices}\n\nType the column key, for example: phone`,
-        filenameColumns.find((field) => field.key === "phone")?.key ||
-          filenameColumns.find((field) => field.key === "photo")?.key ||
-          filenameColumns.find((field) => field.key === "admission_number")?.key ||
-          "name"
-      );
-      if (selectedColumn === null) return;
-
       const query = selectedColumn.trim()
         ? `?filename_column=${encodeURIComponent(selectedColumn.trim())}`
         : "";
@@ -586,6 +594,7 @@ export default function StudentsPage() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(encodedUri);
+      setShowPhotoDownload(false);
     } catch (error: any) {
       setErrorMsg(error.message || "Failed to download Photos.");
     } finally {
@@ -824,8 +833,8 @@ export default function StudentsPage() {
               )}
 
               <button
-                onClick={handleDownloadPhotos}
-                disabled={isDownloadingPhotos}
+                onClick={openPhotoDownloadModal}
+                disabled={isDownloadingPhotos || withPhotos === 0}
                 className="px-4 py-2 bg-white hover:bg-gray-50 text-indigo-600 border border-indigo-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shrink-0 shadow-sm disabled:opacity-50"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1126,6 +1135,120 @@ export default function StudentsPage() {
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50"
               >
                 {isSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Photo Download Modal ── */}
+      {showPhotoDownload && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Download Photos</h3>
+                  <p className="text-xs font-medium text-gray-500">{withPhotos} photos ready</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPhotoDownload(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 text-xl leading-none transition-colors"
+                disabled={isDownloadingPhotos}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Name Each Photo By</label>
+                <select
+                  value={photoFilenameColumn}
+                  onChange={(e) => setPhotoFilenameColumn(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                  disabled={isDownloadingPhotos}
+                >
+                  {usableSchema.map((field) => (
+                    <option key={field.key} value={field.key}>
+                      {field.header} ({field.key})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-2">
+                  The selected column becomes the filename inside the ZIP, with a proper .jpg extension.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { key: "phone", label: "Phone" },
+                  { key: "admission_number", label: "Admission" },
+                  { key: "name", label: "Name" },
+                ].filter((item) => usableSchema.some((field) => field.key === item.key)).map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setPhotoFilenameColumn(item.key)}
+                    disabled={isDownloadingPhotos}
+                    className={`px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${
+                      photoFilenameColumn === item.key
+                        ? "bg-indigo-600 border-indigo-600 text-white"
+                        : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {isDownloadingPhotos && (
+                <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+                  <div className="h-1.5 w-full bg-indigo-200/60 rounded-full overflow-hidden mb-3">
+                    <div
+                      className={`h-full bg-indigo-600 rounded-full transition-all duration-300 ${downloadProgress?.percent === null ? "animate-pulse w-full" : ""}`}
+                      style={downloadProgress?.percent !== null ? { width: `${downloadProgress?.percent ?? 0}%` } : undefined}
+                    />
+                  </div>
+                  <p className="text-xs font-bold text-indigo-800">{downloadProgress?.label || "Packaging your photos..."}</p>
+                  <p className="text-[10px] font-medium text-indigo-500/80 mt-1">
+                    {downloadProgress?.total
+                      ? `${formatBytes(downloadProgress.loaded)} of ${formatBytes(downloadProgress.total)}${downloadProgress.percent !== null ? ` (${downloadProgress.percent}%)` : ""}`
+                      : "Please keep this window open while we prepare the ZIP."}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 bg-gray-50/50">
+              <button
+                type="button"
+                onClick={() => setShowPhotoDownload(false)}
+                disabled={isDownloadingPhotos}
+                className="flex-1 px-4 py-2.5 text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-medium text-sm transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadPhotos(photoFilenameColumn)}
+                disabled={isDownloadingPhotos || !photoFilenameColumn}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {isDownloadingPhotos ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Packaging...
+                  </>
+                ) : "Download ZIP"}
               </button>
             </div>
           </div>
