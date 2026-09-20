@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { API_URL } from "@/lib/api";
 import { Modal } from "@/components/Modal";
+import { SchoolSelect } from "@/components/SchoolSelect";
 
 export default function Home() {
   const [schoolName, setSchoolName] = useState("");
@@ -86,13 +87,12 @@ export default function Home() {
     setIsCreating(false);
   };
 
-  const handleSelectSchool = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedId = e.target.value;
+  const handleSelectSchool = (selectedId: string) => {
     if (!selectedId) {
       clearActiveSchool();
       return;
     }
-    
+
     const school = existingSchools.find(s => s.id === selectedId);
     if (school) {
       setActiveSchool(school);
@@ -188,18 +188,16 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 relative">
           
           <div className="md:col-span-7 flex flex-col justify-center">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Select Active Workspace</label>
-            <select 
-              className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none text-base text-gray-800 font-medium transition-all appearance-none cursor-pointer"
-              onChange={handleSelectSchool}
+            <span className="block text-sm font-semibold text-gray-700 mb-2">Select Active Workspace</span>
+            <SchoolSelect
+              schools={existingSchools}
               value={activeSchool?.id || ""}
-              style={{ backgroundImage: `url('data:image/svg+xml;utf8,<svg fill="none" viewBox="0 0 24 24" stroke="gray" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>')`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1.2em' }}
-            >
-              <option value="">-- Choose a school --</option>
-              {existingSchools.map((school) => (
-                <option key={school.id} value={school.id}>{school.name}</option>
-              ))}
-            </select>
+              onChange={handleSelectSchool}
+              ariaLabel="Select Active Workspace"
+              placeholder="-- Choose a school --"
+              clearLabel="Clear selection"
+              buttonClassName="px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none text-base text-gray-800 font-medium transition-all cursor-pointer"
+            />
           </div>
 
           <div className="hidden md:flex md:col-span-1 items-center justify-center">
