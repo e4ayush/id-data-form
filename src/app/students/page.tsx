@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { API_URL } from "@/lib/api";
+import { SchoolSelect } from "@/components/SchoolSelect";
 
 const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "";
 
@@ -226,8 +227,7 @@ export default function StudentsPage() {
     }
   };
 
-  const handleSchoolChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const schoolId = e.target.value;
+  const handleSchoolChange = (schoolId: string) => {
     const school = schools.find((s) => s.id === schoolId);
     if (school) {
       setActiveSchool(school);
@@ -792,17 +792,14 @@ export default function StudentsPage() {
 
         {/* School picker and Export */}
         <div className="flex items-center gap-3">
-          <select
+          <SchoolSelect
+            schools={schools}
             value={activeSchool?.id || ""}
             onChange={handleSchoolChange}
-            aria-label="Active school"
-            className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm min-w-[220px]"
-          >
-            <option value="" disabled>Select a school</option>
-            {schools.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+            ariaLabel="Active school"
+            className="min-w-[240px]"
+            buttonClassName="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+          />
           {activeSchool && (
             <div className="flex items-center gap-2">
               <select
