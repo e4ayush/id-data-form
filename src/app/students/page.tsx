@@ -64,6 +64,7 @@ export default function StudentsPage() {
   // New Student States
   const [showCreate, setShowCreate] = useState(false);
   const [newStudent, setNewStudent] = useState<Record<string, string>>({ name: "" });
+  const [newStudentPhoto, setNewStudentPhoto] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   // Refresh/Sync States
@@ -88,8 +89,11 @@ export default function StudentsPage() {
   const [downloadProgress, setDownloadProgress] = useState<ProgressState | null>(null);
   const [showPhotoDownload, setShowPhotoDownload] = useState(false);
   const [photoFilenameColumn, setPhotoFilenameColumn] = useState("phone");
-  const [excelClassFilter, setExcelClassFilter] = useState("All");
   const [excelFileFormat, setExcelFileFormat] = useState("xlsx");
+
+  // Delete confirmation
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; description: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Error feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -131,7 +135,6 @@ export default function StudentsPage() {
       setColumnSchema(result.column_schema || []);
       if (resetFilters) {
         setSelectedClass("All");
-        setExcelClassFilter("All");
         setSearchQuery("");
         setSelectedStudentIds(new Set());
       }
@@ -176,9 +179,31 @@ export default function StudentsPage() {
         const result = await res.json();
         throw new Error(result.detail || "Failed to create student.");
       }
+
+      const created = await res.json();
+      const createdId = created?.data?.[0]?.id;
+
+      // A photo can only be attached once the student row exists, so it is
+      // uploaded straight after the create succeeds.
+      if (newStudentPhoto && createdId) {
+        try {
+          const formData = new FormData();
+          formData.append("file", newStudentPhoto);
+          const photoRes = await fetch(`${API_URL}/upload-photo/${createdId}`, {
+            method: "POST",
+            headers: { "X-Admin-Secret": ADMIN_SECRET },
+            body: formData,
+          });
+          if (!photoRes.ok) throw new Error();
+        } catch {
+          setErrorMsg("Student added, but the photo could not be uploaded. Use Edit to try again.");
+        }
+      }
+
       fetchStudents(activeSchool.id);
       setShowCreate(false);
       setNewStudent({ name: "" });
+      setNewStudentPhoto(null);
     } catch (error: any) {
       setErrorMsg(error.message || "Create failed. Please try again.");
     } finally {
@@ -196,20 +221,52 @@ export default function StudentsPage() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return;
+  // Deletions go through a styled confirmation modal rather than window.confirm.
+  // Browsers can suppress repeated native dialogs, in which case confirm()
+  // returns false and the delete silently does nothing at all.
+  const requestDelete = (ids: string[], description: string) => {
+    if (ids.length === 0) return;
+    setPendingDelete({ ids, description });
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const ids = pendingDelete.ids;
+    setIsDeleting(true);
     try {
-      const res = await fetch(`${API_URL}/student/${id}`, {
-        method: "DELETE",
-        headers: adminHeaders,
-      });
-      if (!res.ok) {
-        const result = await res.json();
-        throw new Error(result.detail || "Delete failed on the server.");
+      if (ids.length === 1) {
+        const res = await fetch(`${API_URL}/student/${ids[0]}`, {
+          method: "DELETE",
+          headers: adminHeaders,
+        });
+        if (!res.ok) {
+          const result = await res.json();
+          throw new Error(result.detail || "Delete failed on the server.");
+        }
+      } else {
+        const res = await fetch(`${API_URL}/students/bulk-delete`, {
+          method: "POST",
+          headers: adminHeaders,
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) {
+          const result = await res.json();
+          throw new Error(result.detail || "Bulk delete failed on the server.");
+        }
       }
-      setStudents(students.filter((s) => s.id !== id));
+
+      const removed = new Set(ids);
+      setStudents((current) => current.filter((student) => !removed.has(student.id)));
+      setSelectedStudentIds((current) => {
+        const next = new Set(current);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setPendingDelete(null);
     } catch (error: any) {
       setErrorMsg(error.message || "Delete failed. Please try again.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -225,42 +282,26 @@ export default function StudentsPage() {
     });
   };
 
+  // The header checkbox acts only on the page you can actually see. Selecting
+  // every student matching the filters is a separate, explicit action, so a bulk
+  // delete can never reach rows that were never on screen.
   const handleSelectVisible = () => {
     setSelectedStudentIds((previous) => {
-      const visibleIds = filteredStudents.map((student) => student.id);
-      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => previous.has(id));
+      const pageIds = paginatedStudents.map((student) => student.id);
+      const allPageSelected = pageIds.length > 0 && pageIds.every((id) => previous.has(id));
       const next = new Set(previous);
 
-      if (allVisibleSelected) {
-        visibleIds.forEach((id) => next.delete(id));
+      if (allPageSelected) {
+        pageIds.forEach((id) => next.delete(id));
       } else {
-        visibleIds.forEach((id) => next.add(id));
+        pageIds.forEach((id) => next.add(id));
       }
       return next;
     });
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedStudentIds.size === 0) return;
-    const count = selectedStudentIds.size;
-    if (!window.confirm(`Delete ${count} selected student${count === 1 ? "" : "s"}? This cannot be undone.`)) return;
-
-    try {
-      const res = await fetch(`${API_URL}/students/bulk-delete`, {
-        method: "POST",
-        headers: adminHeaders,
-        body: JSON.stringify({ ids: Array.from(selectedStudentIds) }),
-      });
-      if (!res.ok) {
-        const result = await res.json();
-        throw new Error(result.detail || "Bulk delete failed on the server.");
-      }
-
-      setStudents((current) => current.filter((student) => !selectedStudentIds.has(student.id)));
-      setSelectedStudentIds(new Set());
-    } catch (error: any) {
-      setErrorMsg(error.message || "Bulk delete failed. Please try again.");
-    }
+  const handleSelectAllMatching = () => {
+    setSelectedStudentIds(new Set(filteredStudents.map((student) => student.id)));
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -504,13 +545,17 @@ export default function StudentsPage() {
   }, [filteredStudents, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const allPageSelected = paginatedStudents.length > 0 && paginatedStudents.every((student) => selectedStudentIds.has(student.id));
   const allFilteredSelected = filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIds.has(student.id));
+  const hasUnselectedMatches = !allFilteredSelected && filteredStudents.length > paginatedStudents.length;
 
   const handleDownloadExcel = async () => {
     if (!activeSchool) return;
     try {
+      // The export honours the same class filter as the table, so what you see
+      // is what you get.
       const query = new URLSearchParams({
-        class_filter: excelClassFilter,
+        class_filter: selectedClass,
         file_format: excelFileFormat,
       });
       const res = await fetch(`${API_URL}/export-file/${activeSchool.id}?${query.toString()}`, { headers: adminHeaders });
@@ -524,11 +569,14 @@ export default function StudentsPage() {
       }
 
       const blob = await res.blob();
-      if (blob.size === 0) return alert("No data to export");
+      if (blob.size === 0) {
+        setErrorMsg("No data to export for the current filters.");
+        return;
+      }
       const encodedUri = window.URL.createObjectURL(blob);
       const contentDisposition = res.headers.get("content-disposition") || "";
       const serverFilename = contentDisposition.match(/filename="?([^"]+)"?/i)?.[1];
-      const classSuffix = excelClassFilter === "All" ? "All_Classes" : `Class_${excelClassFilter}`;
+      const classSuffix = selectedClass === "All" ? "All_Classes" : `Class_${selectedClass}`;
       const link = document.createElement("a");
       link.href = encodedUri;
       link.download = serverFilename || `${activeSchool.name}_${classSuffix}_Students.${excelFileFormat}`;
@@ -730,17 +778,6 @@ export default function StudentsPage() {
           {activeSchool && (
             <div className="flex items-center gap-2">
               <select
-                value={excelClassFilter}
-                onChange={(e) => setExcelClassFilter(e.target.value)}
-                className="px-3 py-2.5 bg-white border border-green-200 rounded-xl text-sm font-medium text-green-800 focus:ring-2 focus:ring-green-400 outline-none shadow-sm max-w-[150px]"
-                aria-label="Class to download in Excel"
-              >
-                <option value="All">All Classes</option>
-                {availableClasses.map((cls) => (
-                  <option key={cls as string} value={cls as string}>Class {cls as string}</option>
-                ))}
-              </select>
-              <select
                 value={excelFileFormat}
                 onChange={(e) => setExcelFileFormat(e.target.value)}
                 className="px-3 py-2.5 bg-white border border-green-200 rounded-xl text-sm font-medium text-green-800 focus:ring-2 focus:ring-green-400 outline-none shadow-sm"
@@ -752,6 +789,9 @@ export default function StudentsPage() {
               </select>
               <button
                 onClick={handleDownloadExcel}
+                title={`Exports ${
+                  selectedClass === "All" ? "all classes" : `class ${selectedClass}`
+                } — the same filter as the table`}
                 className="px-4 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -830,12 +870,25 @@ export default function StudentsPage() {
             {/* Results count & Actions */}
             <div className="xl:ml-auto flex flex-wrap items-center gap-3 w-full xl:w-auto">
               {selectedStudentIds.size > 0 && (
-                <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
                   <span className="text-xs font-bold text-red-600">
                     {selectedStudentIds.size} selected
                   </span>
+                  {hasUnselectedMatches && (
+                    <button
+                      onClick={handleSelectAllMatching}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline decoration-dotted"
+                    >
+                      Select all {filteredStudents.length} matching
+                    </button>
+                  )}
                   <button
-                    onClick={handleBulkDelete}
+                    onClick={() =>
+                      requestDelete(
+                        Array.from(selectedStudentIds),
+                        `${selectedStudentIds.size} selected student${selectedStudentIds.size === 1 ? "" : "s"}`
+                      )
+                    }
                     className="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-md transition-colors"
                   >
                     Delete Selected
@@ -910,10 +963,10 @@ export default function StudentsPage() {
                       <th className="px-4 py-3.5 text-left w-12">
                         <input
                           type="checkbox"
-                          checked={allFilteredSelected}
+                          checked={allPageSelected}
                           onChange={handleSelectVisible}
                           className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          aria-label="Select all filtered students"
+                          aria-label="Select all students on this page"
                         />
                       </th>
                       <th className="px-4 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-20">Photo</th>
@@ -977,7 +1030,7 @@ export default function StudentsPage() {
                               Edit
                             </button>
                             <button
-                              onClick={() => handleDelete(student.id, student.name)}
+                              onClick={() => requestDelete([student.id], student.name)}
                               className="px-3 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100"
                             >
                               Delete
@@ -1035,10 +1088,42 @@ export default function StudentsPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-100">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
               <h3 className="text-base font-bold text-gray-900">Add New Student</h3>
-              <button onClick={() => setShowCreate(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-xl leading-none">×</button>
+              <button onClick={() => { setShowCreate(false); setNewStudentPhoto(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-xl leading-none">×</button>
             </div>
             <div className="overflow-y-auto max-h-[60vh] p-6">
               <form id="createForm" onSubmit={handleCreateStudent} className="space-y-3">
+                <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                  {newStudentPhoto ? (
+                    <img
+                      src={URL.createObjectURL(newStudentPhoto)}
+                      className="w-16 h-16 rounded-xl object-cover ring-1 ring-gray-200"
+                      alt="Preview"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-300 text-xl font-bold">
+                      {newStudent.name?.charAt(0)?.toUpperCase() || "?"}
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-1.5">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Student Photo (optional)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setNewStudentPhoto(e.target.files?.[0] || null)}
+                      className="block w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                    />
+                    {newStudentPhoto && (
+                      <button
+                        type="button"
+                        onClick={() => setNewStudentPhoto(null)}
+                        className="text-xs text-red-500 font-semibold hover:text-red-700"
+                      >
+                        Remove photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Dynamically derived fields — only fields from this school's uploaded sheet */}
                 {createFormFields.allFields.map(({ key, label }: any) => {
                   return (
@@ -1059,9 +1144,46 @@ export default function StudentsPage() {
               </form>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-              <button onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2.5 text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl font-medium text-sm transition-colors">Cancel</button>
+              <button onClick={() => { setShowCreate(false); setNewStudentPhoto(null); }} className="flex-1 px-4 py-2.5 text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl font-medium text-sm transition-colors">Cancel</button>
               <button form="createForm" type="submit" disabled={isCreating} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
                 {isCreating ? "Adding..." : "Add Student"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {pendingDelete && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900">Delete Confirmation</h3>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600">
+                You are about to permanently delete{" "}
+                <strong className="text-gray-900">{pendingDelete.description}</strong> from the database.
+                <br /><br />
+                Are you absolutely sure? This action cannot be undone.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl font-medium text-sm transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Yes, Delete"}
               </button>
             </div>
           </div>
