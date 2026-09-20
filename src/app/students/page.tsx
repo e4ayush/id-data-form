@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/immutability, react-hooks/exhaustive-deps, react-hooks/preserve-manual-memoization, react-hooks/set-state-in-effect, @next/next/no-img-element, jsx-a11y/alt-text, @typescript-eslint/no-unused-vars */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { API_URL } from "@/lib/api";
 
 const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "";
@@ -55,6 +55,10 @@ export default function StudentsPage() {
   const [selectedClass, setSelectedClass] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+
+  // Ids returned by the previous fetch, used to flag rows that have arrived since.
+  const seenStudentIds = useRef<Set<string> | null>(null);
+  const [newStudentIds, setNewStudentIds] = useState<Set<string>>(new Set());
 
   const [fullSizeImage, setFullSizeImage] = useState<string | null>(null);
   const [editStudent, setEditStudent] = useState<any | null>(null);
@@ -131,8 +135,19 @@ export default function StudentsPage() {
     try {
       const res = await fetch(`${API_URL}/students/${schoolId}`, { headers: adminHeaders });
       const result = await res.json();
-      setStudents(result.data || []);
+      const fetched: any[] = result.data || [];
+      setStudents(fetched);
       setColumnSchema(result.column_schema || []);
+
+      // A student whose id was not in the previous fetch arrived since then.
+      // Switching school starts a fresh baseline, otherwise every student in the
+      // new school would be flagged as new.
+      const previous = resetFilters ? null : seenStudentIds.current;
+      const arrived = previous ? fetched.filter((s) => !previous.has(s.id)).map((s) => s.id) : [];
+      seenStudentIds.current = new Set(fetched.map((s) => s.id));
+      setNewStudentIds(new Set(arrived));
+      if (arrived.length > 0) setCurrentPage(1);
+
       if (resetFilters) {
         setSelectedClass("All");
         setSearchQuery("");
@@ -531,8 +546,15 @@ export default function StudentsPage() {
           s.section?.toLowerCase().includes(q)
       );
     }
+    // Rows that arrived since the last refresh float to the top. Array.sort is
+    // stable, so everything else keeps the backend's name ordering.
+    if (newStudentIds.size > 0) {
+      list = [...list].sort(
+        (a, b) => Number(!newStudentIds.has(a.id)) - Number(!newStudentIds.has(b.id))
+      );
+    }
     return list;
-  }, [students, selectedClass, searchQuery]);
+  }, [students, selectedClass, searchQuery, newStudentIds]);
 
   // Reset pagination on filter change
   useEffect(() => {
@@ -746,6 +768,11 @@ export default function StudentsPage() {
                 {lastRefreshed && (
                   <span className="text-xs text-gray-400">
                     Last synced: {lastRefreshed.toLocaleTimeString()}
+                  </span>
+                )}
+                {newStudentIds.size > 0 && (
+                  <span className="text-xs font-semibold text-emerald-600">
+                    {newStudentIds.size} new since last refresh
                   </span>
                 )}
                 <button
@@ -982,7 +1009,7 @@ export default function StudentsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {paginatedStudents.map((student) => (
-                      <tr key={student.id} className={`hover:bg-gray-50/60 transition-colors group ${selectedStudentIds.has(student.id) ? "bg-indigo-50/40" : ""}`}>
+                      <tr key={student.id} className={`hover:bg-gray-50/60 transition-colors group ${selectedStudentIds.has(student.id) ? "bg-indigo-50/40" : newStudentIds.has(student.id) ? "bg-emerald-50/50" : ""}`}>
                         <td className="px-4 py-3.5">
                           <input
                             type="checkbox"
@@ -1008,15 +1035,29 @@ export default function StudentsPage() {
                         </td>
                         {dataColumns.map((field) => {
                           const value = getFieldValue(student, field);
+                          const isNewRow = newStudentIds.has(student.id);
                           return (
                             <td key={field.key} className="px-4 py-3.5 text-gray-600 text-xs">
                               {value ? (
-                                <span
-                                  title={String(value)}
-                                  className={`block max-w-full truncate ${field.key === "name" ? "font-semibold text-gray-900 text-sm" : ""}`}
-                                >
-                                  {String(value)}
-                                </span>
+                                field.key === "name" ? (
+                                  <span className="flex items-center gap-1.5 min-w-0">
+                                    <span
+                                      title={String(value)}
+                                      className="block min-w-0 truncate font-semibold text-gray-900 text-sm"
+                                    >
+                                      {String(value)}
+                                    </span>
+                                    {isNewRow && (
+                                      <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200">
+                                        New
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span title={String(value)} className="block max-w-full truncate">
+                                    {String(value)}
+                                  </span>
+                                )
                               ) : (
                                 <span className="text-gray-300">—</span>
                               )}
