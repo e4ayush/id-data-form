@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { API_URL } from "@/lib/api";
+import { SchoolSelect } from "@/components/SchoolSelect";
 
 const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "";
 
@@ -226,8 +227,7 @@ export default function StudentsPage() {
     }
   };
 
-  const handleSchoolChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const schoolId = e.target.value;
+  const handleSchoolChange = (schoolId: string) => {
     const school = schools.find((s) => s.id === schoolId);
     if (school) {
       setActiveSchool(school);
@@ -571,16 +571,30 @@ export default function StudentsPage() {
   const allFilteredSelected = filteredStudents.length > 0 && filteredStudents.every((student) => selectedStudentIds.has(student.id));
   const hasUnselectedMatches = !allFilteredSelected && filteredStudents.length > paginatedStudents.length;
 
+  // The export mirrors the table: the current selection if there is one,
+  // otherwise exactly the rows the search and class filter are showing.
+  const excelExportIds = useMemo(
+    () =>
+      selectedStudentIds.size > 0
+        ? Array.from(selectedStudentIds)
+        : filteredStudents.map((student) => student.id),
+    [selectedStudentIds, filteredStudents]
+  );
+  const excelExportCount = excelExportIds.length;
+
   const handleDownloadExcel = async () => {
     if (!activeSchool) return;
+    if (excelExportIds.length === 0) {
+      setErrorMsg("Nothing to export - no students match the current filters.");
+      return;
+    }
     try {
-      // The export honours the same class filter as the table, so what you see
-      // is what you get.
-      const query = new URLSearchParams({
-        class_filter: selectedClass,
-        file_format: excelFileFormat,
+      // Sent as a POST body so a whole-school export is not limited by URL length.
+      const res = await fetch(`${API_URL}/export-file/${activeSchool.id}`, {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify({ student_ids: excelExportIds, file_format: excelFileFormat }),
       });
-      const res = await fetch(`${API_URL}/export-file/${activeSchool.id}?${query.toString()}`, { headers: adminHeaders });
       if (!res.ok) {
         let message = "Export failed.";
         try {
@@ -598,10 +612,15 @@ export default function StudentsPage() {
       const encodedUri = window.URL.createObjectURL(blob);
       const contentDisposition = res.headers.get("content-disposition") || "";
       const serverFilename = contentDisposition.match(/filename="?([^"]+)"?/i)?.[1];
-      const classSuffix = selectedClass === "All" ? "All_Classes" : `Class_${selectedClass}`;
+      const scopeSuffix =
+        selectedStudentIds.size > 0
+          ? `Selected_${excelExportIds.length}`
+          : selectedClass === "All"
+            ? "All_Classes"
+            : `Class_${selectedClass}`;
       const link = document.createElement("a");
       link.href = encodedUri;
-      link.download = serverFilename || `${activeSchool.name}_${classSuffix}_Students.${excelFileFormat}`;
+      link.download = serverFilename || `${activeSchool.name}_${scopeSuffix}_Students.${excelFileFormat}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -792,17 +811,14 @@ export default function StudentsPage() {
 
         {/* School picker and Export */}
         <div className="flex items-center gap-3">
-          <select
+          <SchoolSelect
+            schools={schools}
             value={activeSchool?.id || ""}
             onChange={handleSchoolChange}
-            aria-label="Active school"
-            className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm min-w-[220px]"
-          >
-            <option value="" disabled>Select a school</option>
-            {schools.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+            ariaLabel="Active school"
+            className="min-w-[240px]"
+            buttonClassName="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+          />
           {activeSchool && (
             <div className="flex items-center gap-2">
               <select
@@ -817,15 +833,18 @@ export default function StudentsPage() {
               </select>
               <button
                 onClick={handleDownloadExcel}
-                title={`Exports ${
-                  selectedClass === "All" ? "all classes" : `class ${selectedClass}`
-                } — the same filter as the table`}
-                className="px-4 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
+                disabled={excelExportCount === 0}
+                title={
+                  selectedStudentIds.size > 0
+                    ? `Exports the ${excelExportCount} selected student${excelExportCount === 1 ? "" : "s"}`
+                    : `Exports the ${excelExportCount} student${excelExportCount === 1 ? "" : "s"} currently shown in the table`
+                }
+                className="px-4 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap disabled:opacity-50"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                Download Excel
+                Download Excel ({excelExportCount})
               </button>
             </div>
           )}
