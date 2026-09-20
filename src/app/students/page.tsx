@@ -1149,8 +1149,9 @@ export default function StudentsPage() {
                     </div>
                   )}
                   <div className="flex-1 space-y-1.5">
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Student Photo (optional)</label>
+                    <label htmlFor="createStudentPhoto" className="block text-xs font-semibold text-gray-500 mb-1">Student Photo (optional)</label>
                     <input
+                      id="createStudentPhoto"
                       type="file"
                       accept="image/*"
                       onChange={(e) => setNewStudentPhoto(e.target.files?.[0] || null)}
@@ -1172,10 +1173,11 @@ export default function StudentsPage() {
                 {createFormFields.allFields.map(({ key, label }: any) => {
                   return (
                     <div key={key}>
-                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+                      <label htmlFor={`create-${key}`} className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
                         {label}{key === "name" ? " *" : ""}
                       </label>
                       <input
+                        id={`create-${key}`}
                         type="text"
                         required={key === "name"}
                         value={newStudent[key] || ""}
@@ -1268,8 +1270,9 @@ export default function StudentsPage() {
                     </div>
                   )}
                   <div className="flex-1 space-y-1.5">
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Student Photo</label>
+                    <label htmlFor="editStudentPhoto" className="block text-xs font-semibold text-gray-500 mb-1">Student Photo</label>
                     <input
+                      id="editStudentPhoto"
                       type="file"
                       accept="image/*"
                       onChange={(e) => setNewPhotoFile(e.target.files?.[0] || null)}
@@ -1290,10 +1293,11 @@ export default function StudentsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   {dataColumns.map((field) => (
                     <div key={field.key} className={field.key === "address" || field.key === "name" ? "col-span-2" : ""}>
-                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+                      <label htmlFor={`edit-${field.key}`} className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
                         {field.header}{field.key === "name" ? " *" : ""}
                       </label>
                       <input
+                        id={`edit-${field.key}`}
                         type="text"
                         required={field.key === "name"}
                         value={getFieldValue(editStudent, field)}
@@ -1521,9 +1525,10 @@ export default function StudentsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Select Photo Folder</label>
+                    <label htmlFor="bulkPhotoFolder" className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Select Photo Folder</label>
                     <div className="relative group">
                       <input
+                        id="bulkPhotoFolder"
                         type="file"
                         // @ts-expect-error: webkitdirectory is non-standard but works in all modern browsers
                         webkitdirectory="" 
