@@ -107,7 +107,7 @@ export default function StudentsPage() {
       if (savedSchool) {
         const parsed = JSON.parse(savedSchool);
         setActiveSchool(parsed);
-        fetchStudents(parsed.id);
+        fetchStudents(parsed.id, { resetFilters: true });
       } else {
         setIsLoading(false);
       }
@@ -118,7 +118,10 @@ export default function StudentsPage() {
     }
   };
 
-  const fetchStudents = async (schoolId: string) => {
+  // Filters are only cleared when switching to a different school. A plain
+  // refresh, a save or a bulk upload keeps the current search and class filter
+  // so the admin does not lose their place in the list.
+  const fetchStudents = async (schoolId: string, { resetFilters = false }: { resetFilters?: boolean } = {}) => {
     setIsLoading(true);
     setIsRefreshing(true);
     try {
@@ -126,10 +129,12 @@ export default function StudentsPage() {
       const result = await res.json();
       setStudents(result.data || []);
       setColumnSchema(result.column_schema || []);
-      setSelectedClass("All");
-      setExcelClassFilter("All");
-      setSearchQuery("");
-      setSelectedStudentIds(new Set());
+      if (resetFilters) {
+        setSelectedClass("All");
+        setExcelClassFilter("All");
+        setSearchQuery("");
+        setSelectedStudentIds(new Set());
+      }
       setLastRefreshed(new Date());
     } catch (error: any) {
       console.error("Failed to fetch students", error);
@@ -187,7 +192,7 @@ export default function StudentsPage() {
     if (school) {
       setActiveSchool(school);
       localStorage.setItem("bizeraActiveSchool", JSON.stringify(school));
-      fetchStudents(schoolId);
+      fetchStudents(schoolId, { resetFilters: true });
     }
   };
 
@@ -830,13 +835,6 @@ export default function StudentsPage() {
                     {selectedStudentIds.size} selected
                   </span>
                   <button
-                    onClick={openPhotoDownloadModal}
-                    disabled={isDownloadingPhotos || selectedWithPhotos === 0}
-                    className="text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-md transition-colors disabled:opacity-50"
-                  >
-                    Download Photos
-                  </button>
-                  <button
                     onClick={handleBulkDelete}
                     className="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-md transition-colors"
                   >
@@ -885,15 +883,24 @@ export default function StudentsPage() {
 
           {/* ── Table ── */}
           {filteredStudents.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-20 text-center">
-              <p className="text-gray-400 text-sm">No students match your search.</p>
-              <button
-                onClick={() => { setSearchQuery(""); setSelectedClass("All"); }}
-                className="mt-3 text-indigo-500 text-sm font-medium hover:underline"
-              >
-                Clear filters
-              </button>
-            </div>
+            students.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-20 text-center">
+                <p className="text-gray-400 text-sm">No students yet for this school.</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Upload a dataset from the Data Injection page to get started.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-20 text-center">
+                <p className="text-gray-400 text-sm">No students match your search.</p>
+                <button
+                  onClick={() => { setSearchQuery(""); setSelectedClass("All"); }}
+                  className="mt-3 text-indigo-500 text-sm font-medium hover:underline"
+                >
+                  Clear filters
+                </button>
+              </div>
+            )
           ) : (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
               <div className="overflow-x-auto overflow-y-hidden custom-scrollbar">
