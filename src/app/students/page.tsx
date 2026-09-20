@@ -768,6 +768,7 @@ export default function StudentsPage() {
           <select
             value={activeSchool?.id || ""}
             onChange={handleSchoolChange}
+            aria-label="Active school"
             className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm min-w-[220px]"
           >
             <option value="" disabled>Select a school</option>
@@ -851,6 +852,7 @@ export default function StudentsPage() {
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
+                aria-label="Filter table by class"
                 className="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-4 pr-10 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm cursor-pointer"
               >
                 <option value="All">All Classes ({students.length})</option>
@@ -1050,6 +1052,7 @@ export default function StudentsPage() {
                   <select
                     value={itemsPerPage}
                     onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                    aria-label="Students per page"
                     className="border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-300"
                   >
                     <option value={50}>50</option>
@@ -1329,8 +1332,9 @@ export default function StudentsPage() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Name Each Photo By</label>
+                <label htmlFor="photoFilenameColumn" className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Name Each Photo By</label>
                 <select
+                  id="photoFilenameColumn"
                   value={photoFilenameColumn}
                   onChange={(e) => setPhotoFilenameColumn(e.target.value)}
                   className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
@@ -1456,8 +1460,9 @@ export default function StudentsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Match Filenames To</label>
+                    <label htmlFor="bulkMatchColumn" className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Match Filenames To</label>
                     <select
+                      id="bulkMatchColumn"
                       value={matchColumn}
                       onChange={(e) => setMatchColumn(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
@@ -1466,7 +1471,7 @@ export default function StudentsPage() {
                       <option value="roll_number">Roll Number</option>
                       <option value="aadhar_number">Aadhar Number</option>
                       <option value="name">Exact Name</option>
-                      <option value="_original_photo_filename">Photo Column (from CSV)</option>
+                      <option value="_original_photo_filename">Photo file name (from your sheet)</option>
                       {createFormFields.rawCustomKeys.map((k) => (
                         <option key={k} value={k}>Custom Field: {k}</option>
                       ))}
